@@ -4,6 +4,7 @@ import RecordDetail from './RecordDetail.jsx'
 import NewRecord from './NewRecord.jsx'
 import { supabase } from './lib/supabaseClient.js'
 import Login from './Login.jsx'
+import EditRecord from './EditRecord.jsx'
 
 console.log('Supabase 客户端已创建：', Boolean(supabase))
 
@@ -27,8 +28,8 @@ function Header() {
 function App() {
   const params = new URLSearchParams(window.location.search)
   const recordId = params.get('record')
+  const editId = params.get('edit')
   const isCreating = params.get('new') === '1'
-
   const isLoggingIn = params.get('login') === '1'
 
   if (isLoggingIn) {
@@ -37,6 +38,10 @@ function App() {
 
   if (isCreating) {
     return <NewRecord />
+  }
+
+  if (editId !== null) {
+    return <EditRecord recordId={editId} key={editId} />
   }
 
   if (recordId !== null) {

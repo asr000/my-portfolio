@@ -116,6 +116,13 @@ function RecordDetail({ recordId }) {
         <article className="record-article">
           <h1>{record.title}</h1>
 
+          <a
+            className="record-create-link"
+            href={`/?edit=${encodeURIComponent(record.id)}`}
+          >
+            编辑记录
+          </a>
+
           <div className="record-tags">
             {record.tags.map((tag) => (
               <span className="record-tag" key={tag}>

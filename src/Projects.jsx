@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabaseClient.js'
+import RecordThumbnail from './RecordThumbnail.jsx'
 
 function Projects() {
   const [records, setRecords] = useState([])
@@ -29,7 +30,7 @@ function Projects() {
 
         const { data, error } = await supabase
           .from('records')
-          .select('id, title, tags, created_at')
+          .select('id, title, tags, cover_path, created_at')
           .order('created_at', { ascending: false })
 
         if (error) {
@@ -90,17 +91,24 @@ function Projects() {
                 className="record-card"
                 href={`/?record=${encodeURIComponent(record.id)}`}
                 key={record.id}
-              >
-                <span className="record-title">
-                  {record.title}
-                </span>
+              > 
+                <RecordThumbnail
+                  key={`${record.id}:${record.cover_path ?? ''}`}
+                  coverPath={record.cover_path}
+                />
 
-                <span className="record-tags">
-                  {record.tags.map((tag) => (
-                    <span className="record-tag" key={tag}>
-                      {tag}
-                    </span>
-                  ))}
+                <span className="record-card-info">
+                  <span className="record-title">
+                    {record.title}
+                  </span>
+
+                  <span className="record-tags">
+                    {record.tags.map((tag) => (
+                      <span className="record-tag" key={tag}>
+                        {tag}
+                      </span>
+                    ))}
+                  </span>
                 </span>
               </a>
             ))}
