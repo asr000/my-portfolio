@@ -294,3 +294,39 @@ h2 {
   border-radius: 12px;
   background-color: #1f2b37;
 }
+
+.login-submit {
+  align-self: flex-start;
+  padding: 10px 24px;
+  border: 0;
+  border-radius: 8px;
+  background-color: #44638c;
+  color: #fdeeee;
+  cursor: pointer;
+}
+
+.login-submit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.login-message {
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.record-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.record-cover {
+  display: block;
+  width: 100%;
+  max-height: 480px;
+  margin-top: 24px;
+  object-fit: contain;
+  border-radius: 12px;
+  background-color: #1f2b37;
+}

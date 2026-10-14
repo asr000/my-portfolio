@@ -2,6 +2,10 @@ import './App.css'
 import Projects from './Projects.jsx'
 import RecordDetail from './RecordDetail.jsx'
 import NewRecord from './NewRecord.jsx'
+import { supabase } from './lib/supabaseClient.js'
+import Login from './Login.jsx'
+
+console.log('Supabase 客户端已创建：', Boolean(supabase))
 
 function Header() {
   return (
@@ -14,6 +18,7 @@ function Header() {
         <a href="#about">关于我</a>
         <a href="#projects">项目</a>
         <a href="#contact">联系我</a>
+        <a href="/?login=1">登录</a>
       </nav>
     </header>
   )
@@ -23,6 +28,12 @@ function App() {
   const params = new URLSearchParams(window.location.search)
   const recordId = params.get('record')
   const isCreating = params.get('new') === '1'
+
+  const isLoggingIn = params.get('login') === '1'
+
+  if (isLoggingIn) {
+    return <Login />
+  }
 
   if (isCreating) {
     return <NewRecord />
