@@ -40,7 +40,7 @@ function Login() {
 
   return (
     <main className="record-page">
-      <a className="record-back" href="/#projects">
+      <a className="record-back" href="/?view=records">
         ← 返回项目记录
       </a>
 

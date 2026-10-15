@@ -220,7 +220,7 @@ async function setup(page, records = [row()], options = {}) {
   return store
 }
 
-test('server pagination, title search, tags and mobile square-cover layout', async ({
+test('separate record and search pages preserve pagination, filters and mobile square covers', async ({
   page,
 }) => {
   const records = Array.from({ length: 25 }, (_, i) =>
@@ -233,15 +233,30 @@ test('server pagination, title search, tags and mobile square-cover layout', asy
   )
   await setup(page, records)
   await page.goto('/')
+  await expect(page.locator('#projects .record-card')).toHaveCount(4)
+  await expect(page.locator('#projects button')).toHaveCount(0)
+  await expect(page.getByLabel('搜索标题')).toHaveCount(0)
+  await page.getByRole('link', { name: '查看全部记录' }).click()
+  await expect(page).toHaveURL(/view=records/)
   await expect(page.locator('.record-card')).toHaveCount(12)
   await page.getByRole('button', { name: '加载更多', exact: true }).click()
   await expect(page.locator('.record-card')).toHaveCount(24)
+  await page.getByRole('link', { name: '搜索记录', exact: true }).click()
+  await expect(page).toHaveURL(/view=search/)
   await page.getByLabel('搜索标题').fill('日志 02')
   await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect(page).toHaveURL(/view=search&q=/)
   await expect(page.locator('.record-card')).toHaveCount(1)
   await expect(page.locator('.record-card')).toContainText('日志 02')
-  await page.getByRole('button', { name: '清除筛选' }).click()
-  await page.getByRole('button', { name: 'CSS', exact: true }).click()
+  await page.getByRole('link', { name: '清除筛选' }).click()
+  await expect(
+    page
+      .getByLabel('标签', { exact: true })
+      .getByRole('option', { name: 'CSS', exact: true }),
+  ).toHaveCount(1)
+  await page.getByLabel('标签', { exact: true }).selectOption('CSS')
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect(page).toHaveURL(/tag=CSS/)
   await expect(page.locator('.record-card')).toHaveCount(12)
   await expect(page.locator('.record-card').first()).toContainText('日志 02')
   await page.setViewportSize({ width: 375, height: 812 })
@@ -254,9 +269,87 @@ test('server pagination, title search, tags and mobile square-cover layout', asy
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true)
-  await page.locator('#projects').screenshot({
+  await page.locator('.records-page-content').screenshot({
     path: 'test-results/mobile-records.png',
   })
+})
+
+test('search filters survive detail, management, edit and return navigation', async ({
+  page,
+}) => {
+  await setup(page)
+  await page.goto('/?view=search&q=原始&tag=React')
+  await page.locator('.record-card').click()
+  await expect(
+    page.getByRole('heading', { name: '原始记录', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: '移入回收站', exact: true }),
+  ).toHaveCount(0)
+  await page.getByRole('link', { name: '管理记录', exact: false }).click()
+  await expect(page).toHaveURL(/manage=1/)
+  await expect(page.getByText('原始正文', { exact: true })).toHaveCount(0)
+  await page.getByRole('link', { name: '编辑记录', exact: true }).click()
+  await expect(page.getByLabel('标题', { exact: true })).toHaveValue('原始记录')
+  await page.getByRole('link', { name: '返回记录管理', exact: false }).click()
+  await page.getByRole('link', { name: '返回记录详情', exact: false }).click()
+  await page.getByRole('link', { name: '返回记录列表', exact: false }).click()
+  await expect(page).toHaveURL(/view=search/)
+  await expect(page.getByLabel('搜索标题')).toHaveValue('原始')
+  await expect(page.getByLabel('标签', { exact: true })).toHaveValue('React')
+  await expect(page.locator('.record-card')).toHaveCount(1)
+  await page.getByRole('link', { name: '清除筛选' }).click()
+  await expect(page.getByLabel('搜索标题')).toHaveValue('')
+  await page.goBack()
+  await expect(page.getByLabel('搜索标题')).toHaveValue('原始')
+  await expect(page.getByLabel('标签', { exact: true })).toHaveValue('React')
+})
+
+test('management hub links to independent trash and cover-cleanup pages', async ({
+  page,
+}) => {
+  const store = await setup(page)
+  await page.goto('/?view=records')
+  await page.getByRole('link', { name: '记录管理', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '记录管理', exact: true }),
+  ).toBeVisible()
+  await expect(page.getByRole('button')).toHaveCount(0)
+  await page.getByRole('link', { name: '回收站', exact: false }).click()
+  await expect(page).toHaveURL(/view=trash/)
+  await expect(page.getByText('回收站是空的。', { exact: true })).toBeVisible()
+  await page.getByRole('link', { name: '返回记录管理', exact: false }).click()
+  await page.getByRole('link', { name: '封面清理', exact: false }).click()
+  await expect(page).toHaveURL(/view=storage/)
+  await expect(page.getByRole('button')).toHaveCount(1)
+  await page.screenshot({
+    path: 'test-results/cover-cleanup.png',
+    fullPage: true,
+  })
+  await page
+    .getByRole('button', { name: '重试清理旧封面', exact: true })
+    .click()
+  await expect(page.getByRole('status')).toContainText('待清理图片已处理')
+  expect(store.calls).toHaveLength(0)
+})
+
+test('independent feature pages require login and never load private records anonymously', async ({
+  page,
+}) => {
+  let privateRequests = 0
+  await page.route('https://portfolio-test.supabase.co/**', (route) => {
+    privateRequests++
+    return route.abort()
+  })
+  for (const view of ['records', 'search', 'manage', 'trash', 'storage']) {
+    await page.goto(`/?view=${view}`)
+    await expect(
+      page.getByRole('link', { name: '登录后查看记录' }),
+    ).toBeVisible()
+    await expect(page.locator('.record-card')).toHaveCount(0)
+    await expect(page.getByRole('button')).toHaveCount(0)
+  }
+  expect(privateRequests).toBe(0)
 })
 
 test('new record saves text and restores a browser draft after reload', async ({
@@ -313,7 +406,9 @@ test('edit keeps id, removes cover and cleans the unused file', async ({
   await page.screenshot({ path: 'test-results/editor.png', fullPage: true })
   await page.getByRole('button', { name: '移除封面' }).click()
   await page.getByRole('button', { name: '保存修改' }).click()
-  await expect(page).toHaveURL(`http://127.0.0.1:4179/?record=${ID}`)
+  await expect(page).toHaveURL(
+    `http://127.0.0.1:4179/?record=${ID}&back=%2F%3Fview%3Drecords`,
+  )
   expect(store.records).toHaveLength(1)
   expect(store.records[0].cover_path).toBeNull()
   expect(store.deleted).toContain(path)
@@ -379,7 +474,9 @@ test('cover selection is compressed, replacement saves a new path and cleans old
     }))
   expect(dimensions).toEqual({ width: 1600, height: 800 })
   await page.getByRole('button', { name: '保存修改' }).click()
-  await expect(page).toHaveURL(`http://127.0.0.1:4179/?record=${ID}`)
+  await expect(page).toHaveURL(
+    `http://127.0.0.1:4179/?record=${ID}&back=%2F%3Fview%3Drecords`,
+  )
   expect(store.records[0].cover_path).toMatch(new RegExp(`^${USER}/.*\\.webp$`))
   expect(store.uploaded).toContain(store.records[0].cover_path)
   expect(store.deleted).toContain(oldPath)
@@ -415,6 +512,7 @@ test('trash needs confirmation, retains cover, restore works, then purge cleans 
   const path = `${USER}/old.webp`
   const store = await setup(page, [row({ cover_path: path })])
   await page.goto(`/?record=${ID}`)
+  await page.getByRole('link', { name: '管理记录', exact: false }).click()
   await page.getByRole('button', { name: '移入回收站', exact: true }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.screenshot({ path: 'test-results/delete-confirmation.png' })
@@ -425,11 +523,13 @@ test('trash needs confirmation, retains cover, restore works, then purge cleans 
     .getByRole('dialog')
     .getByRole('button', { name: '移入回收站', exact: true })
     .click()
-  await expect(page).toHaveURL(/#projects/)
+  await expect(page).toHaveURL(/view=records/)
   expect(store.records[0].deleted_at).toBeTruthy()
   expect(store.deleted).toHaveLength(0)
-  await page.getByRole('button', { name: '回收站', exact: true }).click()
+  await page.getByRole('link', { name: '记录管理', exact: true }).click()
+  await page.getByRole('link', { name: '回收站', exact: false }).click()
   await page.locator('.record-card').click()
+  await page.getByRole('link', { name: '管理记录', exact: false }).click()
   await page.getByRole('button', { name: '恢复记录' }).click()
   await expect(
     page.getByRole('button', { name: '移入回收站', exact: true }),
@@ -440,14 +540,15 @@ test('trash needs confirmation, retains cover, restore works, then purge cleans 
     .getByRole('dialog')
     .getByRole('button', { name: '移入回收站', exact: true })
     .click()
-  await expect(page).toHaveURL(/#projects/)
-  await page.goto(`/?record=${ID}`)
+  await expect(page).toHaveURL(/view=trash/)
+  await page.locator('.record-card').click()
+  await page.getByRole('link', { name: '管理记录', exact: false }).click()
   await page.getByRole('button', { name: '彻底删除', exact: true }).click()
   await page
     .getByRole('dialog')
     .getByRole('button', { name: '彻底删除', exact: true })
     .click()
-  await expect(page).toHaveURL(/#projects/)
+  await expect(page).toHaveURL(/view=trash/)
   expect(store.records).toHaveLength(0)
   expect(store.deleted).toContain(path)
 })

@@ -21,6 +21,7 @@ import {
   validateRecord,
 } from './lib/recordUtils.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
+import { listReturn, recordLink } from './lib/navigation.js'
 
 export default function RecordEditor({ recordId }) {
   const [loaded, setLoaded] = useState(null)
@@ -53,7 +54,12 @@ export default function RecordEditor({ recordId }) {
       active = false
     }
   }, [recordId, attempt])
-  const back = recordId ? `/?record=${recordId}` : '/#projects'
+  const returnTo = listReturn(
+    new URLSearchParams(window.location.search).get('back'),
+  )
+  const back = recordId
+    ? recordLink(recordId, { back: returnTo, manage: true })
+    : returnTo
   if (!loaded)
     return (
       <main className="record-page">
@@ -358,7 +364,8 @@ function EditorForm({ user, record, draft, back }) {
           queueCleanup(user.id, result.old_cover_path)
         const remaining = await cleanupFiles(user.id)
         if (remaining)
-          notice = '记录已保存，旧图片清理尚未完成，可在列表中重试。'
+          notice =
+            '记录已保存，旧图片清理尚未完成，可前往记录管理中的封面清理重试。'
         removeLocal(key)
       } catch {
         notice = '记录已保存，本机草稿或旧图片清理未完成。'
@@ -367,7 +374,12 @@ function EditorForm({ user, record, draft, back }) {
       setSaved(true)
       setPending(null)
       window.location.assign(
-        `/?record=${result.record.id}${notice ? `&notice=${encodeURIComponent(notice)}` : ''}`,
+        recordLink(result.record.id, {
+          back: listReturn(
+            new URLSearchParams(window.location.search).get('back'),
+          ),
+          notice,
+        }),
       )
     } catch (err) {
       if (err.code) {
@@ -415,7 +427,7 @@ function EditorForm({ user, record, draft, back }) {
           }
         }}
       >
-        ← 返回{record ? '记录详情' : '项目记录'}
+        ← 返回{record ? '记录管理' : '记录列表'}
       </a>
       <div className="record-editor">
         <h1>{record ? '编辑记录' : '新增记录'}</h1>

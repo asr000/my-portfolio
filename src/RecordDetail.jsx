@@ -10,8 +10,9 @@ import { readLocal, removeLocal, writeLocal } from './lib/localData.js'
 import { errorText, formatDate } from './lib/recordUtils.js'
 import { useCover } from './lib/useCover.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
+import { listReturn, recordLink } from './lib/navigation.js'
 
-export default function RecordDetail({ recordId }) {
+export default function RecordDetail({ recordId, manage = false }) {
   const [record, setRecord] = useState(null)
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState('loading')
@@ -22,7 +23,14 @@ export default function RecordDetail({ recordId }) {
   const [reload, setReload] = useState(0)
   const [pending, setPending] = useState(null)
   const locked = useRef(false)
-  const cover = useCover(record?.cover_path)
+  const cover = useCover(manage ? null : record?.cover_path)
+  const params = new URLSearchParams(window.location.search)
+  const back = listReturn(
+    params.get('back'),
+    record?.deleted_at ? 'trash' : 'records',
+  )
+  const detailHref = recordLink(recordId, { back })
+  const manageHref = recordLink(recordId, { back, manage: true })
   useEffect(() => {
     let active = true
     async function load() {
@@ -78,13 +86,15 @@ export default function RecordDetail({ recordId }) {
       let notice = ''
       try {
         if (await cleanupFiles(user.id))
-          notice = '记录操作成功，部分旧图片仍待清理，可返回列表重试。'
+          notice =
+            '记录操作成功，部分旧图片仍待清理，可前往记录管理中的封面清理重试。'
       } catch {
         notice = '记录操作成功，旧图片清理未完成。'
       }
       if (request.action === 'purge' || request.action === 'trash') {
+        const target = request.action === 'purge' ? '/?view=trash' : back
         window.location.assign(
-          `/${notice ? `?notice=${encodeURIComponent(notice)}` : ''}#projects`,
+          `${target}${notice ? `&notice=${encodeURIComponent(notice)}` : ''}`,
         )
       } else {
         setRecord(result.record)
@@ -112,8 +122,8 @@ export default function RecordDetail({ recordId }) {
   const notice = new URLSearchParams(window.location.search).get('notice')
   return (
     <main className="record-page">
-      <a className="record-back" href="/#projects">
-        ← 返回项目记录
+      <a className="record-back" href={manage && record ? detailHref : back}>
+        ← {manage && record ? '返回记录详情' : '返回记录列表'}
       </a>
       {notice && (
         <p className="notice" role="status">
@@ -136,9 +146,15 @@ export default function RecordDetail({ recordId }) {
       {pending && (
         <div className="notice">
           <p>上次操作结果尚未确认。</p>
-          <button disabled={busy} onClick={() => act(pending.action)}>
-            重试上次操作
-          </button>
+          {manage ? (
+            <button disabled={busy} onClick={() => act(pending.action)}>
+              重试上次操作
+            </button>
+          ) : (
+            <a className="text-link" href={manageHref}>
+              处理上次操作 →
+            </a>
+          )}
         </div>
       )}
       {actionMessage && (
@@ -151,76 +167,96 @@ export default function RecordDetail({ recordId }) {
           {record.deleted_at && (
             <p className="notice">这条记录在回收站中，封面仍然保留。</p>
           )}
-          <h1>{record.title}</h1>
+          <h1>{manage ? '管理记录' : record.title}</h1>
+          {manage && <h2 className="managed-record-title">{record.title}</h2>}
           <p className="record-meta">
             创建于 {formatDate(record.created_at)}
             {record.updated_at && ` · 更新于 ${formatDate(record.updated_at)}`}
           </p>
-          <div className="actions record-actions">
-            {!record.deleted_at ? (
-              <>
-                <a
-                  className="record-create-link"
-                  aria-disabled={!!pending || busy}
-                  onClick={(e) => {
-                    if (pending || busy) e.preventDefault()
-                  }}
-                  href={`/?edit=${record.id}`}
-                >
-                  编辑记录
-                </a>
-                <button
-                  className="danger-button"
-                  disabled={busy || !!pending}
-                  onClick={() => setDialog('trash')}
-                >
-                  移入回收站
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  disabled={busy || !!pending}
-                  onClick={() => act('restore')}
-                >
-                  恢复记录
-                </button>
-                <button
-                  className="danger-button"
-                  disabled={busy || !!pending}
-                  onClick={() => setDialog('purge')}
-                >
-                  彻底删除
-                </button>
-              </>
-            )}
-          </div>
-          <div className="record-tags">
-            {record.tags.map((tag) => (
-              <a
-                className="record-tag"
-                key={tag}
-                href={`/?tag=${encodeURIComponent(tag)}#projects`}
-              >
-                {tag}
-              </a>
-            ))}
-          </div>
-          {cover.loading && <p role="status">正在读取封面…</p>}
-          {cover.error && (
-            <p role="status">
-              封面加载失败。<button onClick={cover.retry}>重试封面</button>
-            </p>
+          {manage ? (
+            <>
+              <p className="helper">
+                {record.deleted_at
+                  ? '恢复后可继续编辑；彻底删除无法撤销。'
+                  : '修改内容或封面，请进入编辑页面。暂时不需要的记录可以移入回收站。'}
+              </p>
+              <div className="actions record-actions">
+                {!record.deleted_at ? (
+                  <>
+                    <a
+                      className="record-create-link"
+                      aria-disabled={!!pending || busy}
+                      onClick={(e) => {
+                        if (pending || busy) e.preventDefault()
+                      }}
+                      href={recordLink(record.id, { back, edit: true })}
+                    >
+                      编辑记录
+                    </a>
+                    <button
+                      className="danger-button"
+                      disabled={busy || !!pending}
+                      onClick={() => setDialog('trash')}
+                    >
+                      移入回收站
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      disabled={busy || !!pending}
+                      onClick={() => act('restore')}
+                    >
+                      恢复记录
+                    </button>
+                    <button
+                      className="danger-button"
+                      disabled={busy || !!pending}
+                      onClick={() => setDialog('purge')}
+                    >
+                      彻底删除
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {!pending && (
+                <div className="record-reading-tools">
+                  <a className="text-link" href={manageHref}>
+                    管理记录 →
+                  </a>
+                </div>
+              )}
+              <div className="record-tags">
+                {record.tags.map((tag) => (
+                  <a
+                    className="record-tag"
+                    key={tag}
+                    href={`/?view=search&tag=${encodeURIComponent(tag)}`}
+                  >
+                    {tag}
+                  </a>
+                ))}
+              </div>
+              {cover.loading && <p role="status">正在读取封面…</p>}
+              {cover.error && (
+                <p role="status">
+                  封面加载失败。<button onClick={cover.retry}>重试封面</button>
+                </p>
+              )}
+              {cover.url && !cover.error && (
+                <img
+                  className="record-cover"
+                  src={cover.url}
+                  alt={`${record.title}的封面`}
+                  onError={cover.fail}
+                />
+              )}
+              <p className="record-content">{record.content}</p>
+            </>
           )}
-          {cover.url && !cover.error && (
-            <img
-              className="record-cover"
-              src={cover.url}
-              alt={`${record.title}的封面`}
-              onError={cover.fail}
-            />
-          )}
-          <p className="record-content">{record.content}</p>
         </article>
       )}
       {dialog && (
