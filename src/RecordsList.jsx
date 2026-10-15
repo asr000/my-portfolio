@@ -8,6 +8,7 @@ import {
 } from './lib/recordUtils.js'
 import { recordLink } from './lib/navigation.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
+import RecordSource from './RecordSource.jsx'
 
 export default function RecordsList({
   query = '',
@@ -150,6 +151,7 @@ export default function RecordsList({
             />
             <span className="record-card-info">
               <span className="record-title">{record.title}</span>
+              {publicView && <RecordSource record={record} />}
               <span className="record-tags">
                 {record.tags.map((value) => (
                   <span className="record-tag" key={value}>

@@ -490,6 +490,57 @@ small,
   font-size: 12px;
   color: #d2e0e9;
 }
+.record-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-top: 6px;
+  color: #d2e0e9;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.record-source-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.record-source-role {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid #6e8ba0;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.record-article .public-record-source {
+  margin: 0 0 16px;
+}
+.public-record-source .record-source {
+  font-size: 14px;
+}
+.maintenance-panel .note-profile-panel {
+  margin: 24px 0;
+  padding: 20px 0;
+  border-top: 1px solid #49677f;
+  border-bottom: 1px solid #49677f;
+}
+.note-profile-panel form {
+  display: grid;
+  gap: 12px;
+  max-width: 36rem;
+}
+.note-profile-panel input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #49677f;
+  border-radius: 8px;
+  background: #1f2b37;
+  color: #fdeeee;
+  font-size: 16px;
+}
+.note-profile-panel button {
+  justify-self: start;
+}
 .record-tag {
   text-decoration: none;
   overflow-wrap: anywhere;

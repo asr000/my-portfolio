@@ -50,6 +50,7 @@ async function setup(page, records = [row()], options = {}) {
     authRequests: [],
     passwordUpdates: 0,
     loseInvitationResponse: !!options.loseInvitationResponse,
+    profiles: new Map(),
   }
   await page.addInitScript(
     ({ user, signedOut, verified }) => {
@@ -197,6 +198,24 @@ async function setup(page, records = [row()], options = {}) {
       actor &&
       (actor === store.authorId ||
         (store.members.has(actor) && store.emailVerified))
+    const publicRecord = (r) =>
+      r.is_public && !r.deleted_at &&
+      (r.user_id === store.authorId || store.members.has(r.user_id))
+    const source = (id) => ({
+      author_name: store.profiles.get(id) || (id === store.authorId ? '网站作者' : '笔记作者-0123456789'),
+      author_role: id === store.authorId ? 'owner' : 'member',
+    })
+    if (url.pathname.endsWith('/rpc/can_write_notes')) return json(!!canWrite)
+    if (url.pathname.endsWith('/rpc/note_profile') ||
+      url.pathname.endsWith('/rpc/set_note_display_name')) {
+      if (!canWrite) return json({ code: '42501', message: '请先兑换邀请码。' }, 403)
+      if (url.pathname.endsWith('/rpc/set_note_display_name')) {
+        const name = request.postDataJSON().p_display_name.trim()
+        if (!name || name.length > 30) return json({ message: '昵称需要 1 到 30 个字符。' }, 400)
+        store.profiles.set(actor, name)
+      }
+      return json({ display_name: source(actor).author_name, author_role: source(actor).author_role })
+    }
     if (url.pathname.endsWith('/rpc/note_access'))
       return json({
         is_author: actor === store.authorId,
@@ -291,10 +310,7 @@ async function setup(page, records = [row()], options = {}) {
         [
           ...new Set(
             store.records
-              .filter(
-                (r) =>
-                  r.user_id === store.authorId && r.is_public && !r.deleted_at,
-              )
+              .filter(publicRecord)
               .flatMap((r) => r.tags),
           ),
         ]
@@ -310,9 +326,7 @@ async function setup(page, records = [row()], options = {}) {
           .filter(
             (r) =>
               r.id === id &&
-              r.user_id === store.authorId &&
-              r.is_public &&
-              !r.deleted_at,
+              publicRecord(r),
           )
           .map((r) => ({
             id: r.id,
@@ -322,15 +336,14 @@ async function setup(page, records = [row()], options = {}) {
             cover_path: r.cover_path,
             created_at: r.created_at,
             updated_at: r.updated_at,
+            ...source(r.user_id),
           })),
       )
     }
     if (url.pathname.endsWith('/rpc/public_records')) {
       store.publicRequests.push(request.url())
       const p = request.postDataJSON()
-      let result = store.records.filter(
-        (r) => r.user_id === store.authorId && r.is_public && !r.deleted_at,
-      )
+      let result = store.records.filter(publicRecord)
       if (p.p_query)
         result = result.filter((r) =>
           r.title.toLowerCase().includes(p.p_query.toLowerCase()),
@@ -354,6 +367,7 @@ async function setup(page, records = [row()], options = {}) {
           cover_path: r.cover_path,
           created_at: r.created_at,
           updated_at: r.updated_at,
+          ...source(r.user_id),
         })),
       )
     }
@@ -382,11 +396,6 @@ async function setup(page, records = [row()], options = {}) {
         )
       const p = request.postDataJSON()
       if (url.pathname.includes('/rpc/set_record_visibility')) {
-        if (actor !== store.authorId)
-          return json(
-            { code: '42501', message: '只有网站作者可以设置公开展示。' },
-            403,
-          )
         p.p_action = p.p_public ? 'publish' : 'unpublish'
       }
       store.calls.push(p)
@@ -499,9 +508,7 @@ async function setup(page, records = [row()], options = {}) {
         path.startsWith(actor + '/') ||
         store.records.some(
           (r) =>
-            r.user_id === store.authorId &&
-            r.is_public &&
-            !r.deleted_at &&
+            publicRecord(r) &&
             r.cover_path === path,
         )
       return route.fulfill({
@@ -1343,7 +1350,7 @@ test('author confirms publishing, shares a public link and can withdraw it', asy
   const store = await setup(page)
   await page.goto(`/?record=${ID}&manage=1`)
   await page.getByRole('button', { name: '公开展示', exact: true }).click()
-  await expect(page.getByRole('dialog')).toContainText('标题、标签、正文和封面')
+  await expect(page.getByRole('dialog')).toContainText('封面和来源昵称')
   await page.getByRole('button', { name: '取消', exact: true }).click()
   expect(store.calls).toHaveLength(0)
   await page.getByRole('button', { name: '公开展示', exact: true }).click()
@@ -1406,7 +1413,7 @@ test('lost publication response survives reload and replays the same request onc
   )
 })
 
-test('other accounts can read public links but never see author management or publish their own work', async ({
+test('invited accounts publish their own notes while other accounts remain isolated', async ({
   page,
 }) => {
   const other = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
@@ -1431,15 +1438,128 @@ test('other accounts can read public links but never see author management or pu
   await expect(page.getByRole('button')).toHaveCount(0)
   await page.goto(`/?record=${otherId}&manage=1`)
   await expect(
-    page.getByText('此账号的记录保持私密。公开展示由网站作者管理。'),
-  ).toBeVisible()
-  await expect(
     page.getByRole('button', { name: '公开展示', exact: true }),
-  ).toHaveCount(0)
+  ).toBeVisible()
   await expect(
     page.getByRole('link', { name: '编辑记录', exact: true }),
   ).toBeVisible()
   expect(store.calls).toHaveLength(0)
+  await page.getByRole('button', { name: '公开展示', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('首页与公开列表')
+  await page.getByRole('button', { name: '确认公开', exact: true }).click()
+  await expect(page.getByText('记录已公开，可以复制公开链接分享。')).toBeVisible()
+  expect(store.records.find((r) => r.id === otherId).is_public).toBe(true)
+  expect(store.records.find((r) => r.id === ID).version).toBe(1)
+  await page.goto(`/?show=${otherId}`)
+  await expect(page.locator('.record-source')).toContainText('受邀作者')
+  await expect(page.locator('.record-source')).not.toContainText('@')
+  await page.goto(`/?record=${otherId}&manage=1`)
+  await page.getByRole('button', { name: '取消公开', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '取消公开', exact: true }).click()
+  await expect(page.getByText('已取消公开，记录仅自己可见。')).toBeVisible()
+  await page.goto(`/?show=${otherId}`)
+  await expect(page.getByText('这条练习未公开、已取消公开或不存在。')).toBeVisible()
+})
+
+test('public notes from multiple invited authors show their source and covers on mobile', async ({ page }) => {
+  const member = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  const memberId = '22222222-2222-4222-8222-222222222222'
+  const store = await setup(page, [
+    row({ title: '站长公开笔记', is_public: true }),
+    row({ id: memberId, user_id: member, title: '朋友的公开笔记', is_public: true,
+      tags: ['成员标签'], cover_path: `${member}/public.png` }),
+    row({ id: '33333333-3333-4333-8333-333333333333', user_id: member,
+      title: '朋友的私密笔记', tags: ['私密标签'] }),
+  ], { signedOut: true })
+  store.members.add(member)
+  store.profiles.set(USER, '站长的练习')
+  store.profiles.set(member, '学习记录'.repeat(7))
+  const requests = []
+  page.on('request', (request) => requests.push(request.url()))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await expect(page.locator('.record-card')).toHaveCount(2)
+  await expect(page.locator('.record-source')).toContainText(['受邀作者', '网站作者'])
+  await page.goto('/?view=showcase')
+  await expect(page.locator('.record-card')).toHaveCount(2)
+  const memberCard = page.locator('.record-card').filter({ hasText: '朋友的公开笔记' })
+  await expect(memberCard.locator('.record-source')).toContainText('学习记录'.repeat(7))
+  await expect(page.getByLabel('标签', { exact: true }).locator('option')).toHaveText([
+    '全部标签', 'React', '成员标签',
+  ])
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: 'test-results/public-authors-mobile.png', fullPage: true })
+  await memberCard.click()
+  await expect(page.locator('.public-record-source')).toContainText('受邀作者')
+  await expect(page.locator('.public-record-source')).not.toContainText('@')
+  await expect(page.getByAltText('朋友的公开笔记的封面')).toBeVisible()
+  await expect.poll(() => page.getByAltText('朋友的公开笔记的封面').evaluate((img) => img.naturalWidth)).toBe(1)
+  await expect(page.getByRole('link', { name: '管理记录', exact: false })).toHaveCount(0)
+  expect(requests.some((url) => url.includes('/object/sign/'))).toBe(false)
+  expect(store.listRequests).toHaveLength(0)
+  await expect(page.locator('.public-record-content .markdown-body')).toContainText('原始正文')
+  await page.screenshot({ path: 'test-results/member-note-mobile.png', fullPage: true })
+})
+
+test('members save their own public nickname, retain it after reload and render it as plain text', async ({ page }) => {
+  const member = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  const memberId = '22222222-2222-4222-8222-222222222222'
+  const store = await setup(page, [
+    row({ is_public: true }),
+    row({ id: memberId, user_id: member, title: '我的公开笔记', is_public: true }),
+  ], { user: member })
+  store.profiles.set(USER, '站长')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/?view=account')
+  await expect(page.getByLabel('公开昵称', { exact: true })).toHaveValue('笔记作者-0123456789')
+  await page.getByLabel('公开昵称', { exact: true }).fill('小明的练习')
+  await page.getByRole('button', { name: '保存昵称', exact: true }).click()
+  await expect(page.getByText('昵称已保存，公开笔记的来源会一起更新。')).toBeVisible()
+  expect(store.profiles.get(USER)).toBe('站长')
+  await page.reload()
+  await expect(page.getByLabel('公开昵称', { exact: true })).toHaveValue('小明的练习')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: 'test-results/note-profile-mobile.png', fullPage: true })
+  await page.goto(`/?show=${memberId}`)
+  await expect(page.locator('.record-source')).toContainText('来源：小明的练习')
+  await expect(page.locator('.record-source-role')).toHaveText('受邀作者')
+  await page.goto('/?view=account')
+  const input = page.getByLabel('公开昵称', { exact: true })
+  await expect(input).toHaveValue('小明的练习')
+  await input.fill('<img src=x onerror=alert(1)>')
+  await page.getByRole('button', { name: '保存昵称', exact: true }).click()
+  await expect(page.getByText('昵称已保存，公开笔记的来源会一起更新。')).toBeVisible()
+  await page.goto(`/?show=${memberId}`)
+  await expect(page.locator('.record-source-name')).toContainText('<img src=x onerror=alert(1)>')
+  await expect(page.locator('.record-source img')).toHaveCount(0)
+  await expect(page.locator('.record-source-role')).toHaveText('受邀作者')
+})
+
+test('ordinary registrations cannot publish or change a public nickname', async ({ page }) => {
+  const member = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  await setup(page, [row({ user_id: member })], { user: member, member: false })
+  await page.goto('/?view=account')
+  await expect(page.getByRole('link', { name: '兑换邀请码', exact: false })).toBeVisible()
+  await expect(page.getByLabel('公开昵称', { exact: true })).toHaveCount(0)
+  await page.goto(`/?record=${ID}&manage=1`)
+  await expect(page.getByRole('link', { name: '兑换邀请码', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '公开展示', exact: true })).toHaveCount(0)
+})
+
+test('missing nickname schema has a retry and does not prevent account sign-out', async ({ page }) => {
+  await setup(page)
+  let missing = true
+  await page.route('**/rest/v1/rpc/note_profile', (route) => missing ? route.fulfill({
+    status: 404, contentType: 'application/json',
+    body: JSON.stringify({ code: 'PGRST202', message: 'Missing function' }),
+  }) : route.fallback())
+  await page.goto('/?view=account')
+  await expect(page.getByRole('alert')).toContainText('云端功能尚未更新')
+  await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeEnabled()
+  missing = false
+  await page.getByRole('button', { name: '重新读取昵称', exact: true }).click()
+  await expect(page.getByLabel('公开昵称', { exact: true })).toHaveValue('网站作者')
+  await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
 test('public filters and return links keep their scope and private tags are excluded', async ({
@@ -1485,7 +1605,7 @@ test('missing publication schema and stale publication changes stay visible and 
 }) => {
   const store = await setup(page, [row()])
   let missing = true
-  await page.route('**/rest/v1/rpc/is_portfolio_author', (route) =>
+  await page.route('**/rest/v1/rpc/can_write_notes', (route) =>
     missing
       ? route.fulfill({
           status: 404,

@@ -6,6 +6,7 @@ import RecordsLayout from './RecordsLayout.jsx'
 import { AuthNotice } from './AuthAccess.jsx'
 import { useNoteAccess } from './lib/useNoteAccess.js'
 import { NoteAccessMessage } from './NoteAccess.jsx'
+import NoteProfile from './NoteProfile.jsx'
 
 export default function Account() {
   const auth = useAuth()
@@ -68,6 +69,7 @@ export default function Account() {
               </a>
             </p>
           )}
+          {access.data?.can_write && <NoteProfile key={auth.user.id} />}
           <p>
             <a className="text-link" href="/?view=forgot-password">
               通过邮件重置密码 →

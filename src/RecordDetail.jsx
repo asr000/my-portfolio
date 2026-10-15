@@ -64,7 +64,7 @@ export default function RecordDetail({ recordId, manage = false }) {
         }
         if (manage && data) {
           const { data: allowed, error } = await supabase
-            .rpc('is_portfolio_author')
+            .rpc('can_write_notes')
             .retry(false)
           if (active) {
             setCanPublish(!error && !!allowed)
@@ -288,7 +288,7 @@ export default function RecordDetail({ recordId, manage = false }) {
                   <p className="helper">
                     {record.is_public
                       ? '当前已公开：访客无需登录即可阅读。后续保存的修改也会更新公开内容。'
-                      : '当前仅自己可见。公开后，标题、标签、正文和封面会向访客展示。'}
+                      : '当前仅自己可见。公开后，标题、标签、正文、封面和来源昵称会显示在首页与公开列表。'}
                   </p>
                   {publicationError ? (
                     <p role="alert">
@@ -311,7 +311,7 @@ export default function RecordDetail({ recordId, manage = false }) {
                     </button>
                   ) : (
                     <p className="helper">
-                      此账号的记录保持私密。公开展示由网站作者管理。
+                      请先验证邮箱并兑换邀请码，再公开自己的笔记。
                     </p>
                   )}
                   {record.is_public && (
@@ -415,7 +415,7 @@ export default function RecordDetail({ recordId, manage = false }) {
         >
           <p>
             {dialog === 'publish'
-              ? `“${record.title}”的标题、标签、正文和封面会向所有访客展示。之后保存的修改也会同步到公开页面。`
+              ? `“${record.title}”的标题、标签、正文、封面和来源昵称会显示在首页与公开列表，所有访客均可阅读。之后保存的修改也会同步到公开页面。`
               : dialog === 'unpublish'
                 ? '取消后不再向访客提供这条练习。已被他人保存的内容无法收回。'
                 : dialog === 'purge'

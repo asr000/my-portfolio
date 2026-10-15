@@ -12,7 +12,7 @@ export function NoteAccessMessage({ access }) {
   return (
     <div className="notice">
       <p>
-        笔记记录功能采用邀请制。兑换邀请码后，即可创建和编辑自己的私密笔记。
+        笔记记录功能采用邀请制。兑换邀请码后，即可创建和编辑自己的笔记，并自行选择是否公开。
       </p>
       <a className="record-create-link" href="/?view=activate">
         兑换邀请码

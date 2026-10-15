@@ -10,7 +10,7 @@ export default function SearchRecords({ publicView = false }) {
       title={publicView ? '练习展示' : '搜索记录'}
       description={
         publicView
-          ? '已经公开的项目与学习记录，无需登录即可阅读。'
+          ? '网站作者与受邀作者公开的项目和学习记录，无需登录即可阅读。'
           : '按标题和标签，找回某一次记录。'
       }
       publicPage={publicView}

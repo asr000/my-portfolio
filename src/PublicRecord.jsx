@@ -4,6 +4,7 @@ import { errorText, formatDate } from './lib/recordUtils.js'
 import { listReturn, loginLink } from './lib/navigation.js'
 import { useCover } from './lib/useCover.js'
 import RecordsLayout from './RecordsLayout.jsx'
+import RecordSource from './RecordSource.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
@@ -67,6 +68,9 @@ export default function PublicRecord({ recordId }) {
       )}
       {status === 'ready' && record && (
         <article className="record-article public-record-article">
+          <p className="public-record-source">
+            <RecordSource record={record} />
+          </p>
           <div className="record-tags">
             {record.tags.map((tag) => (
               <a
