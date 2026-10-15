@@ -1,8 +1,14 @@
 import { test, expect } from '@playwright/test'
 import { Buffer } from 'node:buffer'
+import { unzipSync, strFromU8 } from 'fflate'
+import fs from 'node:fs/promises'
 
 const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const ID = '11111111-1111-4111-8111-111111111111'
+const COVER_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=',
+  'base64',
+)
 const row = (extra = {}) => ({
   id: ID,
   user_id: USER,
@@ -25,9 +31,15 @@ async function setup(page, records = [row()], options = {}) {
     uploaded: [],
     deleted: [],
     loseResponse: !!options.loseResponse,
+    logoutScopes: [],
+    listRequests: [],
+    failCover: false,
   }
   await page.addInitScript(
-    ({ user }) => {
+    ({ user, signedOut }) => {
+      if (localStorage.getItem('test-auth-initialized')) return
+      localStorage.setItem('test-auth-initialized', '1')
+      if (signedOut) return
       const body = btoa(
         JSON.stringify({
           sub: user,
@@ -53,7 +65,7 @@ async function setup(page, records = [row()], options = {}) {
         JSON.stringify(session),
       )
     },
-    { user: USER },
+    { user: USER, signedOut: !!options.signedOut },
   )
   await page.route('https://portfolio-test.supabase.co/**', async (route) => {
     const request = route.request()
@@ -74,6 +86,38 @@ async function setup(page, records = [row()], options = {}) {
           'Access-Control-Allow-Methods': '*',
         },
       })
+    if (url.pathname === '/auth/v1/logout') {
+      store.logoutScopes.push(url.searchParams.get('scope'))
+      return json({})
+    }
+    if (url.pathname === '/auth/v1/token') {
+      if (options.rejectLogin)
+        return json(
+          { code: 'invalid_credentials', message: 'Invalid login credentials' },
+          400,
+        )
+      const body = Buffer.from(
+        JSON.stringify({
+          sub: USER,
+          exp: Math.floor(Date.now() / 1000) + 3600,
+          role: 'authenticated',
+        }),
+      ).toString('base64url')
+      return json({
+        access_token: `test.${body}.signature`,
+        refresh_token: 'test-refresh',
+        expires_in: 3600,
+        token_type: 'bearer',
+        user: {
+          id: USER,
+          email: 'test@example.invalid',
+          aud: 'authenticated',
+          role: 'authenticated',
+        },
+      })
+    }
+    if (url.pathname === '/auth/v1/user' && options.expired)
+      return json({ code: 'bad_jwt', message: 'JWT expired' }, 401)
     if (url.pathname === '/auth/v1/user')
       return json({
         id: USER,
@@ -141,6 +185,7 @@ async function setup(page, records = [row()], options = {}) {
       return json(result)
     }
     if (url.pathname === '/rest/v1/records') {
+      store.listRequests.push(request.url())
       let result = store.records.slice()
       const id = url.searchParams.get('id')?.replace('eq.', '')
       if (id) result = result.filter((r) => r.id === id)
@@ -177,6 +222,15 @@ async function setup(page, records = [row()], options = {}) {
           : result,
       )
     }
+    if (
+      url.pathname.includes('/storage/v1/object/sign/') &&
+      request.method() === 'GET'
+    )
+      return route.fulfill({
+        status: store.failCover ? 503 : 200,
+        contentType: 'image/png',
+        body: store.failCover ? 'Unavailable' : COVER_BYTES,
+      })
     if (url.pathname.includes('/storage/v1/object/sign/'))
       return json({
         signedURL: '/object/sign/record-covers/test.webp?token=test',
@@ -568,4 +622,326 @@ test('trash needs confirmation, retains cover, restore works, then purge cleans 
   await expect(page).toHaveURL(/view=trash/)
   expect(store.records).toHaveLength(0)
   expect(store.deleted).toContain(path)
+})
+
+test('homepage downloads the small WOFF2 and never requests the original TTF', async ({
+  page,
+}) => {
+  const requests = []
+  page.on('request', (request) => requests.push(request.url()))
+  const [font] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().includes('portfolio-hero') &&
+        response.request().resourceType() === 'font',
+    ),
+    page.goto('/'),
+  ])
+  expect(font.status()).toBe(200)
+  expect((await font.body()).length).toBeLessThan(20000)
+  await page.evaluate(() => document.fonts.ready)
+  expect(requests.some((url) => url.includes('.ttf'))).toBe(false)
+  expect(requests.some((url) => url.includes('/MarkdownContent'))).toBe(false)
+  expect(
+    await page.evaluate(() => document.fonts.check('45px "Portfolio Hero"')),
+  ).toBe(true)
+  await page.locator('.hero').screenshot({ path: 'test-results/hero-font.png' })
+})
+
+test('account shows identity, signs out locally and retains private browser drafts', async ({
+  page,
+}) => {
+  const store = await setup(page)
+  await page.goto('/')
+  await page.getByRole('link', { name: '我的账号', exact: true }).click()
+  await expect(
+    page.getByText('test@example.invalid', { exact: true }),
+  ).toBeVisible()
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'portfolio:v2:draft:account-test',
+      JSON.stringify({ title: '保留草稿' }),
+    ),
+  )
+  await page.screenshot({ path: 'test-results/account.png', fullPage: true })
+  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await expect(
+    page.getByText('已退出当前设备。', { exact: false }),
+  ).toBeVisible()
+  expect(store.logoutScopes).toEqual(['local'])
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem('portfolio:v2:draft:account-test'),
+    ),
+  ).toContain('保留草稿')
+  await page.getByRole('link', { name: '返回记录列表', exact: false }).click()
+  await expect(
+    page.getByRole('link', { name: '登录后查看记录', exact: true }),
+  ).toBeVisible()
+  await expect(page.locator('.record-card')).toHaveCount(0)
+})
+
+test('login restores the requested edit page after authenticating', async ({
+  page,
+}) => {
+  await setup(page, [row()], { signedOut: true })
+  const destination = `/?edit=${ID}&back=%2F%3Fview%3Drecords`
+  await page.goto(destination)
+  await page.getByRole('link', { name: '请先登录', exact: true }).click()
+  await expect(page).toHaveURL(/login=1&next=/)
+  await page.getByLabel('邮箱', { exact: true }).fill('test@example.invalid')
+  await page.getByLabel('密码', { exact: true }).fill('test-password')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page).toHaveURL('http://127.0.0.1:4179' + destination)
+  await expect(page.getByLabel('标题', { exact: true })).toHaveValue('原始记录')
+})
+
+test('failed credentials stay on login and an expired session cannot read records', async ({
+  page,
+}) => {
+  const store = await setup(page, [row()], { expired: true, rejectLogin: true })
+  await page.goto('/?view=records')
+  await expect(
+    page.getByText('登录已过期，请重新登录。', { exact: true }),
+  ).toBeVisible()
+  expect(store.listRequests).toHaveLength(0)
+  await page.getByRole('link', { name: '登录后查看记录' }).click()
+  await page.getByLabel('邮箱', { exact: true }).fill('test@example.invalid')
+  await page.getByLabel('密码', { exact: true }).fill('incorrect')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page.getByText('登录失败：', { exact: false })).toBeVisible()
+  await expect(page).toHaveURL(/login=1/)
+})
+
+test('signing out in another tab closes the editor and flushes its text draft', async ({
+  page,
+  context,
+}) => {
+  await setup(page)
+  await page.goto('/?new=1')
+  await expect(page.getByLabel('标题', { exact: true })).toBeVisible()
+  const other = await context.newPage()
+  await setup(other)
+  await other.goto('/?view=account')
+  await expect(
+    other.getByRole('button', { name: '退出登录', exact: true }),
+  ).toBeVisible()
+  await page.getByLabel('标题', { exact: true }).fill('跨标签退出前的草稿')
+  await other.getByRole('button', { name: '退出登录', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '请先登录', exact: true }),
+  ).toBeVisible()
+  const drafts = await page.evaluate(() =>
+    Object.entries(localStorage)
+      .filter(([key]) => key.startsWith('portfolio:v2:draft:'))
+      .map(([, value]) => JSON.parse(value)),
+  )
+  expect(
+    drafts.some((draft) => draft.form?.title === '跨标签退出前的草稿'),
+  ).toBe(true)
+  await other.close()
+})
+
+test('JSON backup reads beyond one page, includes trash optionally and excludes tokens', async ({
+  page,
+}) => {
+  const records = Array.from({ length: 206 }, (_, i) =>
+    row({
+      id: `22222222-2222-4222-8222-${String(i + 1).padStart(12, '0')}`,
+      title: `备份记录 ${i + 1}`,
+      created_at: new Date(Date.UTC(2026, 9, 15, 12, -i)).toISOString(),
+      deleted_at: i === 205 ? '2026-10-15T13:00:00.000Z' : null,
+    }),
+  )
+  const store = await setup(page, records)
+  await page.goto('/?view=manage')
+  await page.getByRole('link', { name: '数据备份', exact: false }).click()
+  await page.getByRole('button', { name: '生成备份', exact: true }).click()
+  await expect(
+    page.getByRole('link', { name: '下载备份', exact: true }),
+  ).toBeVisible()
+  let [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('link', { name: '下载备份', exact: true }).click(),
+  ])
+  let backup = JSON.parse(await fs.readFile(await download.path(), 'utf8'))
+  expect(backup.records).toHaveLength(206)
+  expect(backup.records.some((record) => record.deleted_at)).toBe(true)
+  expect(backup.coverFilesIncluded).toBe(false)
+  expect(JSON.stringify(backup)).not.toContain('access_token')
+  expect(store.listRequests).toHaveLength(2)
+  await page.getByLabel('包含回收站中的记录').uncheck()
+  await page.getByRole('button', { name: '生成备份', exact: true }).click()
+  await expect(
+    page.getByRole('link', { name: '下载备份', exact: true }),
+  ).toBeVisible()
+  ;[download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('link', { name: '下载备份', exact: true }).click(),
+  ])
+  backup = JSON.parse(await fs.readFile(await download.path(), 'utf8'))
+  expect(backup.records).toHaveLength(205)
+  expect(backup.records.some((record) => record.deleted_at)).toBe(false)
+  expect(store.calls).toHaveLength(0)
+})
+
+test('ZIP backup includes real cover bytes once for shared paths and a readable manifest', async ({
+  page,
+}) => {
+  const path = `${USER}/cover.png`
+  await setup(page, [
+    row({ cover_path: path }),
+    row({
+      id: '33333333-3333-4333-8333-333333333333',
+      cover_path: path,
+      deleted_at: '2026-10-15',
+    }),
+  ])
+  await page.goto('/?view=backup')
+  await page.getByLabel('备份格式').selectOption('zip')
+  await page.getByRole('button', { name: '生成备份', exact: true }).click()
+  await expect(
+    page.getByRole('link', { name: '下载备份', exact: true }),
+  ).toBeVisible()
+  await page.screenshot({ path: 'test-results/backup.png', fullPage: true })
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('link', { name: '下载备份', exact: true }).click(),
+  ])
+  const files = unzipSync(await fs.readFile(await download.path()))
+  const backup = JSON.parse(strFromU8(files['records.json']))
+  expect(backup.records).toHaveLength(2)
+  expect(backup.coverFilesIncluded).toBe(true)
+  expect(
+    Object.keys(files).filter((name) => name.startsWith('covers/')),
+  ).toHaveLength(1)
+  const cover = backup.records[0].cover_file
+  expect(backup.records[1].cover_file).toBe(cover)
+  expect(Buffer.from(files[cover])).toEqual(COVER_BYTES)
+  expect(strFromU8(files['README.txt'])).toContain('当前网站尚无自动导入入口')
+})
+
+test('failed cover download never produces a misleading complete ZIP and JSON remains available', async ({
+  page,
+}) => {
+  const store = await setup(page, [row({ cover_path: `${USER}/cover.png` })])
+  store.failCover = true
+  await page.goto('/?view=backup')
+  await page.getByLabel('备份格式').selectOption('zip')
+  await page.getByRole('button', { name: '生成备份', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('本次 ZIP 未生成')
+  await expect(
+    page.getByRole('link', { name: '下载备份', exact: true }),
+  ).toHaveCount(0)
+  await page.getByLabel('备份格式').selectOption('json')
+  await page.getByRole('button', { name: '生成备份', exact: true }).click()
+  await expect(
+    page.getByRole('link', { name: '下载备份', exact: true }),
+  ).toBeVisible()
+})
+
+test('backup cancellation stops a pending page without changing cloud records', async ({
+  page,
+}) => {
+  const store = await setup(page)
+  let release
+  let requestStarted = false
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  await page.route('**/rest/v1/records?*', async (route) => {
+    requestStarted = true
+    await gate
+    try {
+      await route.fallback()
+    } catch {
+      /* browser has already cancelled this request */
+    }
+  })
+  await page.goto('/?view=backup')
+  await page.getByRole('button', { name: '生成备份', exact: true }).click()
+  await expect.poll(() => requestStarted).toBe(true)
+  await page.getByRole('button', { name: '取消导出', exact: true }).click()
+  await expect(
+    page.getByText('导出已取消，云端记录不受影响。', { exact: true }),
+  ).toBeVisible()
+  release()
+  await expect(
+    page.getByRole('link', { name: '下载备份', exact: true }),
+  ).toHaveCount(0)
+  expect(store.calls).toHaveLength(0)
+})
+
+test('Markdown preview and saved reading render code, tables and lists without executing HTML', async ({
+  page,
+}) => {
+  const store = await setup(page, [])
+  await page.goto('/?new=1')
+  await page.getByLabel('标题', { exact: true }).fill('Markdown 记录')
+  const markdown = [
+    '## 学习笔记',
+    '',
+    '**重点**与`行内代码`',
+    '',
+    '- 列表项',
+    '',
+    '| 项目 | 状态 |',
+    '| --- | --- |',
+    '| React | 完成 |',
+    '',
+    '```python',
+    'print("Hello")',
+    '# ' + '长代码'.repeat(60),
+    '```',
+    '',
+    '```unknown-language',
+    '<literal>',
+    '```',
+    '',
+    '[官方资料](https://example.com)',
+    '[危险链接](javascript:alert(1))',
+    '',
+    '<script>window.markdownExecuted = true</script>',
+    '<img src=x onerror="window.markdownExecuted=true">',
+  ].join('\n')
+  await page.getByLabel('详细内容', { exact: true }).fill(markdown)
+  await page.getByRole('button', { name: '预览', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: '学习笔记', exact: true }),
+  ).toBeVisible()
+  await expect(page.locator('.markdown-body strong')).toHaveText('重点')
+  await expect(page.locator('.markdown-body table')).toBeVisible()
+  await expect(
+    page.locator('.markdown-body .hljs-built_in').first(),
+  ).toBeVisible()
+  await expect(page.locator('.markdown-body pre').last()).toContainText(
+    '<literal>',
+  )
+  await expect(page.locator('.markdown-body script')).toHaveCount(0)
+  await expect(page.locator('.markdown-body img')).toHaveCount(0)
+  await expect(
+    page.getByRole('link', { name: '危险链接', exact: true }),
+  ).toHaveCount(0)
+  expect(await page.evaluate(() => window.markdownExecuted)).toBeUndefined()
+  await page.setViewportSize({ width: 375, height: 812 })
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true)
+  await page.screenshot({
+    path: 'test-results/markdown-preview.png',
+    fullPage: true,
+  })
+  await page.getByRole('button', { name: '写作', exact: true }).click()
+  await expect(page.getByLabel('详细内容', { exact: true })).toHaveValue(
+    markdown,
+  )
+  await page.getByRole('button', { name: '保存记录', exact: true }).click()
+  await expect(page).toHaveURL(/\?record=/)
+  await expect(
+    page.getByRole('heading', { name: '学习笔记', exact: true }),
+  ).toBeVisible()
+  expect(store.records[0].content).toBe(markdown)
+  expect(await page.evaluate(() => window.markdownExecuted)).toBeUndefined()
 })

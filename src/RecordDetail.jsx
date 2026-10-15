@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   cleanupFiles,
   currentUser,
@@ -10,7 +10,9 @@ import { readLocal, removeLocal, writeLocal } from './lib/localData.js'
 import { errorText, formatDate } from './lib/recordUtils.js'
 import { useCover } from './lib/useCover.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
-import { listReturn, recordLink } from './lib/navigation.js'
+import { listReturn, loginLink, recordLink } from './lib/navigation.js'
+
+const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
 export default function RecordDetail({ recordId, manage = false }) {
   const [record, setRecord] = useState(null)
@@ -132,7 +134,10 @@ export default function RecordDetail({ recordId, manage = false }) {
       )}
       {status === 'loading' && <p role="status">正在读取详情…</p>}
       {status === 'signed-out' && (
-        <a className="record-create-link" href="/?login=1">
+        <a
+          className="record-create-link"
+          href={loginLink(window.location.pathname + window.location.search)}
+        >
           请先登录
         </a>
       )}
@@ -258,7 +263,9 @@ export default function RecordDetail({ recordId, manage = false }) {
                   onError={cover.fail}
                 />
               )}
-              <p className="record-content">{record.content}</p>
+              <Suspense fallback={<p role="status">正在排版正文…</p>}>
+                <MarkdownContent content={record.content} />
+              </Suspense>
             </>
           )}
         </article>

@@ -1,6 +1,6 @@
 @font-face {
-  font-family: "LXGW WenKai";
-  src: url("/fonts/LXGWWenKai-Regular.ttf") format("truetype");
+  font-family: 'Portfolio Hero';
+  src: url('./assets/fonts/portfolio-hero.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -8,7 +8,7 @@
 
 /* 全局字体和基础文字设置 */
 :root {
-  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   line-height: 1.5;
   font-weight: 400;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabaseClient.js'
 import {
   cleanupFiles,
@@ -21,7 +21,9 @@ import {
   validateRecord,
 } from './lib/recordUtils.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
-import { listReturn, recordLink } from './lib/navigation.js'
+import { listReturn, loginLink, recordLink } from './lib/navigation.js'
+
+const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
 export default function RecordEditor({ recordId }) {
   const [loaded, setLoaded] = useState(null)
@@ -87,7 +89,10 @@ export default function RecordEditor({ recordId }) {
     return (
       <main className="record-page">
         <h1>请先登录</h1>
-        <a className="record-create-link" href="/?login=1">
+        <a
+          className="record-create-link"
+          href={loginLink(window.location.pathname + window.location.search)}
+        >
           去登录
         </a>
         <a href={back}>返回</a>
@@ -124,6 +129,7 @@ function EditorForm({ user, record, draft, back }) {
   const [message, setMessage] = useState('')
   const [draftMessage, setDraftMessage] = useState('')
   const [saved, setSaved] = useState(false)
+  const [contentView, setContentView] = useState('write')
   const saving = useRef(false)
   const completed = useRef(false)
   const uploadIntent = useRef(draft?.uploadIntent || null)
@@ -136,6 +142,43 @@ function EditorForm({ user, record, draft, back }) {
     !!uploadedPath ||
     !!pending
   const disabled = busy || !!pending || !!candidate
+  const lastDraft = useRef(null)
+  useEffect(() => {
+    lastDraft.current =
+      !candidate && dirty && !saved
+        ? {
+            form,
+            recordId: draftId,
+            baseVersion,
+            uploadedPath,
+            uploadIntent: uploadIntent.current,
+            pending,
+            savedAt: new Date().toISOString(),
+          }
+        : null
+  }, [
+    candidate,
+    dirty,
+    saved,
+    form,
+    draftId,
+    baseVersion,
+    uploadedPath,
+    pending,
+  ])
+  useEffect(
+    () => () => {
+      // An auth change can unmount the editor without a document unload event.
+      if (!completed.current && lastDraft.current) {
+        try {
+          writeLocal(key, lastDraft.current)
+        } catch {
+          /* the visible storage error already explains the limitation */
+        }
+      }
+    },
+    [key],
+  )
 
   useEffect(
     () => () => {
@@ -467,15 +510,51 @@ function EditorForm({ user, record, draft, back }) {
             onChange={(e) => setForm({ ...form, tags: e.target.value })}
           />
           <label htmlFor="record-content">详细内容</label>
+          <div className="content-mode" role="group" aria-label="正文显示模式">
+            <button
+              type="button"
+              aria-pressed={contentView === 'write'}
+              onClick={() => setContentView('write')}
+            >
+              写作
+            </button>
+            <button
+              type="button"
+              aria-pressed={contentView === 'preview'}
+              onClick={() => setContentView('preview')}
+            >
+              预览
+            </button>
+            <a
+              className="text-link"
+              href="/?view=markdown-help"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              写作说明 ↗
+            </a>
+          </div>
           <textarea
             id="record-content"
             name="content"
             rows={10}
             maxLength={100000}
             disabled={disabled}
+            hidden={contentView !== 'write'}
             value={form.content}
             onChange={(e) => setForm({ ...form, content: e.target.value })}
           />
+          {contentView === 'preview' && (
+            <div className="markdown-preview" aria-label="正文预览">
+              {form.content ? (
+                <Suspense fallback={<p role="status">正在准备预览…</p>}>
+                  <MarkdownContent content={form.content} />
+                </Suspense>
+              ) : (
+                <p className="helper">还没有正文，切回写作输入内容。</p>
+              )}
+            </div>
+          )}
           <label htmlFor="record-cover">封面（可选）</label>
           <input
             ref={input}

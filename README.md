@@ -4,6 +4,10 @@ React + Vite 个人记录网站。Supabase 提供账号、数据库和私有图�
 
 ## 本次实现
 
+- 首页字体由 25,575,676 字节的完整 TTF 改为 13,820 字节的 WOFF2 子集；完整原文件保留在 `resources/fonts/`，不进入网站发布目录。
+- 账号页显示当前邮箱，支持仅退出当前设备；登录后返回原页面，会话变化同步到其他标签页，退出时保留本机文字草稿。
+- 数据备份页可导出 JSON，或导出包含封面的 ZIP；可选择包含回收站，按云端分页读取，不受列表已加载条数限制。
+- Markdown 写作与预览，支持标题、列表、表格、任务列表、链接、图片和代码高亮；正文与备份组件按需加载。
 - 首页记录框可滚动浏览，每批读取 12 条，接近底部时自动加载更多；记录列表、搜索、管理、回收站和封面清理各有独立页面。
 - 详情页用于阅读，通过“管理记录”进入编辑、删除或恢复操作；搜索条件随返回链接保留。
 - 左侧正方形封面、右侧标题和标签的可滚动记录卡片。
@@ -53,6 +57,35 @@ npm run build
 - `npm run test:browser` 用本机 Chrome 跑交互测试。需要已安装 Google Chrome；没有 Chrome 时，可在 Playwright 配置选择安装好的浏览器。
 - 浏览器测试使用隔离的模拟 Supabase 服务，不访问真实账号或记录，不能替代上线后的真实联调。
 - 数据库测试中的 Auth、Storage 元数据和登录上下文在本地构造，不代表 Supabase Storage HTTP 服务也已经真实验证。
+- 浏览器检查覆盖登录返回、过期会话、跨标签页退出、草稿保留、206 条记录分批导出、ZIP 封面内容、取消与失败、Markdown 安全显示及字体请求大小。
+
+## 账号、备份与 Markdown 的使用
+
+- 首页右上角和记录页面右上角可进入“我的账号”；退出使用 Supabase 的 `scope: 'local'`，其他设备继续保持登录。
+- “记录管理 → 数据备份”或账号页的备份链接进入导出。选择 JSON 或 ZIP，点击“生成备份”，完成后再点击“下载备份”。
+- JSON 包含记录文字、标签、创建和更新时间、版本、封面云端路径与回收站状态。ZIP 另含 `covers/` 和 `README.txt`，每条记录的 `cover_file` 指向 ZIP 内封面。
+- 单次备份最多 50 MB。读取记录或封面失败时显示错误，不把不完整 ZIP 作为成功备份提供下载。
+- 导出不包含登录凭证、本机未保存草稿或 Markdown 引用的外部图片。当前提供导出和本地解压查看，尚无自动导入入口。
+- 备份读取多页记录，不是数据库事务快照；导出期间请避免在其他设备批量增删改记录。
+- 编辑器点击“预览”查看排版，点击“写作”继续修改；“写作说明”在新标签页打开，保留当前编辑内容。
+- Markdown 原文仍保存在原有 `content` 字段，已有记录保留原文。原始 HTML 不执行，危险 URL 使用渲染器默认规则过滤；未知代码语言以普通代码显示。
+- 本次账号、备份和正文排版更新不增加数据库字段；已经执行过原有升级脚本的项目无需再次运行 SQL。
+
+## 重建首页字体
+
+字形来自仓库内原始霞鹜文楷。子集内部字体名改为 `Portfolio Hero`，版权和 OFL 许可保留在字体元数据及 `public/fonts/OFL.txt` 中。正文继续使用系统字体。
+
+修改首页文案时，编辑 `src/lib/heroText.js`，再生成字体：
+
+```powershell
+python -m pip install --target .tools/fonttools fonttools==4.67.0 brotli==1.2.0
+python scripts/build-font.py
+npm run build
+```
+
+脚本覆盖全部首页主视觉文案及可打印 ASCII，检查字形是否齐全。生成的 `src/assets/fonts/portfolio-hero.woff2` 需要随源码提交，Netlify 构建无需安装 Python。Vite 为字体生成内容哈希文件名，沿用 `/assets/` 缓存规则。
+
+实现参考：[fontTools 字体裁剪](https://fonttools.readthedocs.io/en/stable/subset/)、[Supabase 当前设备退出](https://supabase.com/docs/reference/javascript/auth-signout)、[react-markdown 安全说明](https://github.com/remarkjs/react-markdown#security)、[fflate ZIP 文档](https://github.com/101arrowz/fflate)。
 
 ## 发布
 

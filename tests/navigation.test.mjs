@@ -1,6 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { listReturn, recordLink } from '../src/lib/navigation.js'
+import {
+  listReturn,
+  recordLink,
+  safeDestination,
+  loginLink,
+} from '../src/lib/navigation.js'
 
 test('return navigation retains search filters without accepting other page actions', () => {
   const back = listReturn('/?view=search&q=React+练习&tag=前端&new=1')
@@ -15,6 +20,25 @@ test('return navigation retains search filters without accepting other page acti
   assert.equal(link.searchParams.get('back'), back)
   assert.equal(link.searchParams.get('edit'), 'record-id')
   assert.equal(link.searchParams.get('record'), null)
+})
+
+test('login returns to an internal page and cannot redirect to an external site or itself', () => {
+  const next = '/?edit=123&back=%2F%3Fview%3Dsearch#editor'
+  assert.equal(
+    new URL(loginLink(next), 'https://portfolio.invalid').searchParams.get(
+      'next',
+    ),
+    next,
+  )
+  for (const value of [
+    'https://example.com/',
+    '//example.com/',
+    'javascript:alert(1)',
+    '/?login=1&next=/',
+    'http://',
+  ]) {
+    assert.equal(safeDestination(value), '/?view=records')
+  }
 })
 
 test('invalid and external return targets fall back to a record-list page', () => {

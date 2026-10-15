@@ -42,8 +42,8 @@ main {
 }
 
 .hero {
-  font-family: 'LXGW WenKai', 'Microsoft YaHei', sans-serif;
-  font-weight: 100;
+  font-family: 'Portfolio Hero', 'Microsoft YaHei', sans-serif;
+  font-weight: 400;
   gap: 16px;
   min-height: 520px;
   display: flex;
@@ -253,7 +253,8 @@ h2 {
 }
 
 .record-fields input,
-.record-fields textarea {
+.record-fields textarea,
+.record-fields select {
   width: 100%;
   padding: 12px;
   border: 1px solid #49677f;
@@ -268,7 +269,8 @@ h2 {
 }
 
 .record-fields input:focus,
-.record-fields textarea:focus {
+.record-fields textarea:focus,
+.record-fields select:focus {
   outline: 2px solid #94bac3;
   outline-offset: 2px;
 }
@@ -501,6 +503,155 @@ small,
 }
 .record-content {
   line-height: 1.9;
+}
+.page-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.account-email {
+  overflow-wrap: anywhere;
+  color: #e3edf2;
+}
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.7;
+}
+.record-fields .checkbox-field input {
+  width: auto;
+  flex: 0 0 auto;
+}
+.content-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.content-mode [aria-pressed='true'] {
+  background: #94bac3;
+  border-color: #94bac3;
+  color: #162b3b;
+}
+.content-mode .text-link {
+  margin-left: auto;
+  font-size: 14px;
+}
+.markdown-preview {
+  padding: 20px;
+  min-height: 260px;
+  border: 1px solid #49677f;
+  border-radius: 10px;
+  background: #1f2b37;
+}
+.markdown-body {
+  color: #d8e5ed;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  color: #fdeeee;
+  margin: 1.3em 0 0.6em;
+  line-height: 1.5;
+}
+.markdown-body h1 {
+  font-size: 28px;
+}
+.markdown-body h2 {
+  font-size: 24px;
+}
+.markdown-body h3 {
+  font-size: 20px;
+}
+.markdown-body p,
+.record-article .markdown-body p {
+  color: inherit;
+  font-size: 16px;
+  line-height: 1.9;
+  margin: 1em 0;
+  white-space: pre-wrap;
+}
+.markdown-body a {
+  color: #a8d9e4;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 24px;
+}
+.markdown-body blockquote {
+  margin: 20px 0;
+  padding: 4px 16px;
+  border-left: 3px solid #94bac3;
+  background: #22394d;
+}
+.markdown-body code,
+.markdown-help code {
+  font-family: Consolas, 'SFMono-Regular', monospace;
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #142738;
+  white-space: break-spaces;
+}
+.markdown-body pre,
+.markdown-help pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 16px;
+  border: 1px solid #49677f;
+  border-radius: 10px;
+  background: #0d1117;
+  line-height: 1.65;
+}
+.markdown-body pre code,
+.markdown-help pre code {
+  padding: 0;
+  white-space: pre;
+  background: transparent;
+}
+.markdown-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 20px 0;
+  border-radius: 8px;
+}
+.markdown-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #49677f;
+  padding: 8px 12px;
+}
+.markdown-body th {
+  background: #243f56;
+}
+.record-fields .markdown-body input[type='checkbox'] {
+  width: auto;
+}
+.markdown-help dt {
+  margin-top: 20px;
+  color: #e3edf2;
+}
+.markdown-help dd {
+  margin: 8px 0;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
 }
 .empty-state {
   padding: 36px 16px;

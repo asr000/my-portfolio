@@ -32,3 +32,23 @@ export function recordLink(
   if (notice) params.set('notice', notice)
   return `/?${params}`
 }
+
+export function safeDestination(value, fallback = '/?view=records') {
+  try {
+    if (!value || value.length > 2000) return fallback
+    const url = new URL(value, 'https://portfolio.invalid')
+    if (
+      url.origin !== 'https://portfolio.invalid' ||
+      url.pathname !== '/' ||
+      url.searchParams.has('login')
+    )
+      return fallback
+    return url.pathname + url.search + url.hash
+  } catch {
+    return fallback
+  }
+}
+
+export function loginLink(next) {
+  return `/?${new URLSearchParams({ login: '1', next: safeDestination(next) })}`
+}

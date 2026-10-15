@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import './App.css'
 import Projects from './Projects.jsx'
 import RecordDetail from './RecordDetail.jsx'
@@ -7,8 +8,18 @@ import EditRecord from './EditRecord.jsx'
 import RecordsPage from './RecordsPage.jsx'
 import SearchRecords from './SearchRecords.jsx'
 import RecordTools, { CoverCleanup, TrashRecords } from './RecordTools.jsx'
+import AuthProvider from './AuthProvider.jsx'
+import { RequireAccount } from './AuthAccess.jsx'
+import { useAuth } from './lib/authContext.js'
+import { loginLink } from './lib/navigation.js'
+import { HERO_TITLE, HERO_NOTE, HERO_LINK_LABEL } from './lib/heroText.js'
+import Account from './Account.jsx'
+
+const DataBackup = lazy(() => import('./DataBackup.jsx'))
+const MarkdownHelp = lazy(() => import('./MarkdownHelp.jsx'))
 
 function Header() {
+  const auth = useAuth()
   return (
     <header className="site-header">
       <a className="logo" href="/">
@@ -19,13 +30,15 @@ function Header() {
         <a href="#about">关于我</a>
         <a href="/?view=records">项目</a>
         <a href="#contact">联系我</a>
-        <a href="/?login=1">登录</a>
+        <a href={auth.user ? '/?view=account' : loginLink('/')}>
+          {auth.status === 'loading' ? '账号' : auth.user ? '我的账号' : '登录'}
+        </a>
       </nav>
     </header>
   )
 }
 
-function App() {
+function Pages() {
   const params = new URLSearchParams(window.location.search)
   const recordId = params.get('record')
   const editId = params.get('edit')
@@ -38,16 +51,29 @@ function App() {
   }
 
   if (isCreating) {
-    return <NewRecord />
+    return (
+      <RequireAccount>
+        <NewRecord />
+      </RequireAccount>
+    )
   }
 
   if (editId !== null) {
-    return <EditRecord recordId={editId} key={editId} />
+    return (
+      <RequireAccount>
+        <EditRecord recordId={editId} key={editId} />
+      </RequireAccount>
+    )
   }
 
   if (recordId !== null) {
     return (
-      <RecordDetail recordId={recordId} manage={params.get('manage') === '1'} />
+      <RequireAccount>
+        <RecordDetail
+          recordId={recordId}
+          manage={params.get('manage') === '1'}
+        />
+      </RequireAccount>
     )
   }
 
@@ -56,6 +82,31 @@ function App() {
   if (view === 'manage') return <RecordTools />
   if (view === 'trash') return <TrashRecords />
   if (view === 'storage') return <CoverCleanup />
+  if (view === 'account') return <Account />
+  if (view === 'backup')
+    return (
+      <Suspense
+        fallback={
+          <main className="record-page">
+            <p role="status">正在准备数据管理…</p>
+          </main>
+        }
+      >
+        <DataBackup />
+      </Suspense>
+    )
+  if (view === 'markdown-help')
+    return (
+      <Suspense
+        fallback={
+          <main className="record-page">
+            <p role="status">正在读取写作说明…</p>
+          </main>
+        }
+      >
+        <MarkdownHelp />
+      </Suspense>
+    )
 
   return (
     <div className="site">
@@ -64,13 +115,15 @@ function App() {
       <main>
         <section className="hero">
           <h1 className="hero-title">
-            Re:从<span className="highlight-char">0</span>开始的代码生活
+            {HERO_TITLE.split('0')[0]}
+            <span className="highlight-char">0</span>
+            {HERO_TITLE.split('0')[1]}
           </h1>
 
-          <p>hey？</p>
+          <p>{HERO_NOTE}</p>
 
           <a className="hero-link" href="/?view=records">
-            查看我的练习
+            {HERO_LINK_LABEL}
           </a>
         </section>
 
@@ -87,6 +140,14 @@ function App() {
         </section>
       </main>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Pages />
+    </AuthProvider>
   )
 }
 

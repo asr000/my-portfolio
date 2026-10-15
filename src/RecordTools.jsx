@@ -13,6 +13,13 @@ export default function RecordTools() {
       <RecordsAccess>
         {() => (
           <nav className="management-links" aria-label="管理功能">
+            <a className="management-link" href="/?view=backup">
+              <span>
+                <strong>数据备份</strong>
+                <small>导出记录文字，或打包记录与封面。</small>
+              </span>
+              <span aria-hidden="true">→</span>
+            </a>
             <a className="management-link" href="/?view=trash">
               <span>
                 <strong>回收站</strong>
