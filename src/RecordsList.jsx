@@ -16,7 +16,7 @@ export default function RecordsList({
   preview = false,
   returnTo = '/?view=records',
 }) {
-  const pageSize = preview ? 4 : PAGE_SIZE
+  const pageSize = PAGE_SIZE
   const [records, setRecords] = useState([])
   const [busy, setBusy] = useState(true)
   const [message, setMessage] = useState('')
@@ -69,7 +69,7 @@ export default function RecordsList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt])
   async function more() {
-    if (loading.current) return
+    if (loading.current || busy) return
     loading.current = true
     setBusy(true)
     setMessage('')
@@ -104,8 +104,22 @@ export default function RecordsList({
       )}
       <div
         className="record-list"
+        role="region"
         aria-label={trash ? '回收站记录列表' : '记录列表'}
+        aria-busy={busy}
         tabIndex={0}
+        onScroll={
+          preview
+            ? (event) => {
+                const list = event.currentTarget
+                if (
+                  hasMore &&
+                  list.scrollHeight - list.scrollTop - list.clientHeight < 80
+                )
+                  more()
+              }
+            : undefined
+        }
       >
         {records.map((record) => (
           <a
@@ -133,6 +147,13 @@ export default function RecordsList({
           </a>
         ))}
       </div>
+      {preview && !!records.length && (
+        <small className="scroll-hint">
+          {hasMore
+            ? `已加载 ${records.length} 条 · 在记录框内向下滚动，自动加载更多`
+            : `共 ${records.length} 条记录`}
+        </small>
+      )}
       {busy && <p role="status">正在读取记录…</p>}
       {message && (
         <p role="alert">

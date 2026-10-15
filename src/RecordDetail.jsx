@@ -225,7 +225,11 @@ export default function RecordDetail({ recordId, manage = false }) {
               {!pending && (
                 <div className="record-reading-tools">
                   <a className="text-link" href={manageHref}>
-                    管理记录 →
+                    管理记录
+                    <span className="record-management-hint">
+                      {record.deleted_at ? '恢复 / 彻底删除' : '编辑 / 删除'}
+                    </span>{' '}
+                    →
                   </a>
                 </div>
               )}

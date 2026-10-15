@@ -464,6 +464,18 @@ small,
   max-height: 520px;
   scrollbar-gutter: stable;
 }
+#projects .record-list {
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #94bac3 #1f2b37;
+}
+.scroll-hint {
+  display: block;
+  margin-top: 8px;
+  text-align: center;
+}
 .record-title {
   line-height: 1.5;
 }
@@ -665,6 +677,11 @@ small,
   display: flex;
   justify-content: flex-end;
   margin: 16px 0;
+}
+.record-management-hint {
+  margin-left: 8px;
+  color: #b8c8d4;
+  font-size: 13px;
 }
 .managed-record-title {
   margin-top: 28px;

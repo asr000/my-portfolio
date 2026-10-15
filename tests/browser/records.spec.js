@@ -233,9 +233,26 @@ test('separate record and search pages preserve pagination, filters and mobile s
   )
   await setup(page, records)
   await page.goto('/')
-  await expect(page.locator('#projects .record-card')).toHaveCount(4)
+  await expect(page.locator('#projects .record-card')).toHaveCount(12)
   await expect(page.locator('#projects button')).toHaveCount(0)
   await expect(page.getByLabel('搜索标题')).toHaveCount(0)
+  const homeList = page.locator('#projects .record-list')
+  expect(
+    await homeList.evaluate((list) => list.scrollHeight > list.clientHeight),
+  ).toBe(true)
+  await homeList.evaluate((list) => {
+    list.scrollTop = list.scrollHeight
+  })
+  await expect(page.locator('#projects .record-card')).toHaveCount(24)
+  expect(await homeList.evaluate((list) => list.scrollTop)).toBeGreaterThan(0)
+  await homeList.evaluate((list) => {
+    list.scrollTop = list.scrollHeight
+  })
+  await expect(page.locator('#projects .record-card')).toHaveCount(25)
+  await expect(page.getByText('共 25 条记录', { exact: true })).toBeVisible()
+  await page
+    .locator('#projects')
+    .screenshot({ path: 'test-results/home-scrolling.png' })
   await page.getByRole('link', { name: '查看全部记录' }).click()
   await expect(page).toHaveURL(/view=records/)
   await expect(page.locator('.record-card')).toHaveCount(12)
