@@ -2,11 +2,8 @@ import './App.css'
 import Projects from './Projects.jsx'
 import RecordDetail from './RecordDetail.jsx'
 import NewRecord from './NewRecord.jsx'
-import { supabase } from './lib/supabaseClient.js'
 import Login from './Login.jsx'
 import EditRecord from './EditRecord.jsx'
-
-console.log('Supabase 客户端已创建：', Boolean(supabase))
 
 function Header() {
   return (
@@ -47,8 +44,6 @@ function App() {
   if (recordId !== null) {
     return <RecordDetail recordId={recordId} />
   }
-
-  // 下面保留原来的 return 和完整首页 JSX
 
   return (
     <div className="site">

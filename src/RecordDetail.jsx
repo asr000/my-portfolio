@@ -1,159 +1,243 @@
-import { useEffect, useState } from 'react'
-import { supabase } from './lib/supabaseClient.js'
+import { useEffect, useRef, useState } from 'react'
+import {
+  cleanupFiles,
+  currentUser,
+  getRecord,
+  mutateRecord,
+  queueCleanup,
+} from './lib/recordsApi.js'
+import { readLocal, removeLocal, writeLocal } from './lib/localData.js'
+import { errorText, formatDate } from './lib/recordUtils.js'
+import { useCover } from './lib/useCover.js'
+import ConfirmDialog from './ConfirmDialog.jsx'
 
-function RecordDetail({ recordId }) {
+export default function RecordDetail({ recordId }) {
   const [record, setRecord] = useState(null)
+  const [user, setUser] = useState(null)
   const [status, setStatus] = useState('loading')
   const [message, setMessage] = useState('')
-  const [coverUrl, setCoverUrl] = useState('')
-  const [coverMessage, setCoverMessage] = useState('')
-
+  const [actionMessage, setActionMessage] = useState('')
+  const [dialog, setDialog] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [reload, setReload] = useState(0)
+  const [pending, setPending] = useState(null)
+  const locked = useRef(false)
+  const cover = useCover(record?.cover_path)
   useEffect(() => {
-    let cancelled = false
-
-    async function loadRecord() {
+    let active = true
+    async function load() {
       try {
-        const { data: sessionData, error: sessionError } =
-          await supabase.auth.getSession()
-
-        if (sessionError) {
-          throw sessionError
-        }
-
-        if (cancelled) {
-          return
-        }
-
-        if (!sessionData.session) {
+        const account = await currentUser()
+        if (!active) return
+        if (!account) {
           setStatus('signed-out')
           return
         }
-
-        const { data, error } = await supabase
-          .from('records')
-          .select('id, title, tags, content, cover_path, created_at')
-          .eq('id', recordId)
-          .maybeSingle()
-
-        if (error) {
-          throw error
+        setUser(account)
+        const operation = readLocal(`action:${account.id}:${recordId}`)
+        if (operation) setPending(operation)
+        const data = await getRecord(recordId)
+        if (active) {
+          setRecord(data)
+          setStatus(data ? 'ready' : 'not-found')
         }
-
-        if (cancelled) {
-          return
-        }
-
-        setRecord(data)
-        setStatus(data ? 'ready' : 'not-found')
-        setCoverUrl('')
-        setCoverMessage('')
-
-        if (data?.cover_path) {
-          setCoverMessage('正在加载封面…')
-
-          try {
-            const { data: signedData, error: signedError } = await supabase
-              .storage
-              .from('record-covers')
-              .createSignedUrl(data.cover_path, 3600)
-
-            if (signedError) {
-              throw signedError
-            }
-
-            if (!cancelled) {
-              setCoverUrl(signedData.signedUrl)
-              setCoverMessage('')
-            }
-          } catch (error) {
-            if (!cancelled) {
-              setCoverMessage(
-                `封面加载失败：${error.message || '请刷新页面重试。'}`
-              )
-            }
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setMessage(error.message || '请求未完成，请检查网络。')
+      } catch (err) {
+        if (active) {
+          setMessage(errorText(err))
           setStatus('error')
         }
       }
     }
-
-    loadRecord()
-
+    load()
     return () => {
-      cancelled = true
+      active = false
     }
-  }, [recordId])
-
+  }, [recordId, reload])
+  async function act(action) {
+    if (locked.current) return
+    locked.current = true
+    setBusy(true)
+    setActionMessage('')
+    const key = `action:${user.id}:${recordId}`
+    const request = pending || {
+      requestId: crypto.randomUUID(),
+      action,
+      recordId,
+      version: record.version,
+    }
+    try {
+      const account = await currentUser()
+      if (account?.id !== user.id) throw new Error('账号已变化，请重新登录。')
+      writeLocal(key, request)
+      setPending(request)
+      const result = await mutateRecord(request)
+      // Store cleanup first, so a refresh after a successful purge can still retry cleanup.
+      if (result.old_cover_path) queueCleanup(user.id, result.old_cover_path)
+      removeLocal(key)
+      setPending(null)
+      let notice = ''
+      try {
+        if (await cleanupFiles(user.id))
+          notice = '记录操作成功，部分旧图片仍待清理，可返回列表重试。'
+      } catch {
+        notice = '记录操作成功，旧图片清理未完成。'
+      }
+      if (request.action === 'purge' || request.action === 'trash') {
+        window.location.assign(
+          `/${notice ? `?notice=${encodeURIComponent(notice)}` : ''}#projects`,
+        )
+      } else {
+        setRecord(result.record)
+        setDialog(null)
+        setActionMessage(notice || '记录已恢复。')
+      }
+    } catch (err) {
+      if (err.code) {
+        setPending(null)
+        try {
+          removeLocal(key)
+        } catch {
+          /* retain retry receipt */
+        }
+      }
+      setActionMessage(
+        `${errorText(err)}${!err.code ? ' 如结果不确定，请重试原操作。' : ''}`,
+      )
+      setDialog(null)
+    } finally {
+      locked.current = false
+      setBusy(false)
+    }
+  }
+  const notice = new URLSearchParams(window.location.search).get('notice')
   return (
     <main className="record-page">
       <a className="record-back" href="/#projects">
         ← 返回项目记录
       </a>
-
-      {status === 'loading' && (
-        <p role="status">正在读取详情…</p>
+      {notice && (
+        <p className="notice" role="status">
+          {notice}
+        </p>
       )}
-
+      {status === 'loading' && <p role="status">正在读取详情…</p>}
       {status === 'signed-out' && (
         <a className="record-create-link" href="/?login=1">
           请先登录
         </a>
       )}
-
-      {status === 'not-found' && (
-        <p>这条记录不存在，或当前账号没有访问权限。</p>
-      )}
-
       {status === 'error' && (
-        <p role="alert">读取失败：{message}</p>
+        <div role="alert">
+          <p>{message}</p>
+          <button onClick={() => setReload((n) => n + 1)}>重试读取</button>
+        </div>
       )}
-
-      {status === 'ready' && record && (
+      {status === 'not-found' && <p>记录不存在，或当前账号没有访问权限。</p>}
+      {pending && (
+        <div className="notice">
+          <p>上次操作结果尚未确认。</p>
+          <button disabled={busy} onClick={() => act(pending.action)}>
+            重试上次操作
+          </button>
+        </div>
+      )}
+      {actionMessage && (
+        <p className="notice" role="status">
+          {actionMessage}
+        </p>
+      )}
+      {record && status === 'ready' && (
         <article className="record-article">
+          {record.deleted_at && (
+            <p className="notice">这条记录在回收站中，封面仍然保留。</p>
+          )}
           <h1>{record.title}</h1>
-
-          <a
-            className="record-create-link"
-            href={`/?edit=${encodeURIComponent(record.id)}`}
-          >
-            编辑记录
-          </a>
-
+          <p className="record-meta">
+            创建于 {formatDate(record.created_at)}
+            {record.updated_at && ` · 更新于 ${formatDate(record.updated_at)}`}
+          </p>
+          <div className="actions record-actions">
+            {!record.deleted_at ? (
+              <>
+                <a
+                  className="record-create-link"
+                  aria-disabled={!!pending || busy}
+                  onClick={(e) => {
+                    if (pending || busy) e.preventDefault()
+                  }}
+                  href={`/?edit=${record.id}`}
+                >
+                  编辑记录
+                </a>
+                <button
+                  className="danger-button"
+                  disabled={busy || !!pending}
+                  onClick={() => setDialog('trash')}
+                >
+                  移入回收站
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  disabled={busy || !!pending}
+                  onClick={() => act('restore')}
+                >
+                  恢复记录
+                </button>
+                <button
+                  className="danger-button"
+                  disabled={busy || !!pending}
+                  onClick={() => setDialog('purge')}
+                >
+                  彻底删除
+                </button>
+              </>
+            )}
+          </div>
           <div className="record-tags">
             {record.tags.map((tag) => (
-              <span className="record-tag" key={tag}>
+              <a
+                className="record-tag"
+                key={tag}
+                href={`/?tag=${encodeURIComponent(tag)}#projects`}
+              >
                 {tag}
-              </span>
+              </a>
             ))}
           </div>
-          
-          {coverMessage && (
-            <p role="status">{coverMessage}</p>
+          {cover.loading && <p role="status">正在读取封面…</p>}
+          {cover.error && (
+            <p role="status">
+              封面加载失败。<button onClick={cover.retry}>重试封面</button>
+            </p>
           )}
-
-          {coverUrl && (
+          {cover.url && !cover.error && (
             <img
               className="record-cover"
-              src={coverUrl}
+              src={cover.url}
               alt={`${record.title}的封面`}
-              onError={() => {
-                setCoverUrl('')
-                setCoverMessage('封面图片未能显示，请刷新页面重试。')
-              }}
+              onError={cover.fail}
             />
           )}
-
-          <p className="record-content">
-            {record.content}
-          </p>
+          <p className="record-content">{record.content}</p>
         </article>
+      )}
+      {dialog && (
+        <ConfirmDialog
+          title={dialog === 'purge' ? '彻底删除这条记录？' : '移入回收站？'}
+          busy={busy}
+          onClose={() => setDialog(null)}
+          onConfirm={() => act(dialog)}
+          confirmLabel={dialog === 'purge' ? '彻底删除' : '移入回收站'}
+        >
+          <p>
+            {dialog === 'purge'
+              ? '这将永久删除记录，并清理不再使用的封面，无法恢复。'
+              : '记录将从列表隐藏。你可以在回收站恢复，封面也会保留。'}
+          </p>
+        </ConfirmDialog>
       )}
     </main>
   )
 }
-
-export default RecordDetail

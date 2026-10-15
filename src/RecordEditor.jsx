@@ -1,0 +1,527 @@
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from './lib/supabaseClient.js'
+import {
+  cleanupFiles,
+  currentUser,
+  getRecord,
+  mutateRecord,
+  prepareCover,
+  queueCleanup,
+} from './lib/recordsApi.js'
+import {
+  draftKey,
+  readLocal,
+  removeLocal,
+  writeLocal,
+} from './lib/localData.js'
+import {
+  EMPTY_FORM,
+  errorText,
+  formatDate,
+  validateRecord,
+} from './lib/recordUtils.js'
+import RecordThumbnail from './RecordThumbnail.jsx'
+
+export default function RecordEditor({ recordId }) {
+  const [loaded, setLoaded] = useState(null)
+  const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let active = true
+    async function load() {
+      try {
+        const user = await currentUser()
+        if (!user) {
+          if (active) setLoaded({ signedOut: true })
+          return
+        }
+        const record = recordId ? await getRecord(recordId) : null
+        if (recordId && (!record || record.deleted_at))
+          throw new Error('记录不存在或已移入回收站。')
+        if (active)
+          setLoaded({
+            user,
+            record,
+            draft: readLocal(draftKey(user.id, recordId)),
+          })
+      } catch (err) {
+        if (active) setError(errorText(err))
+      }
+    }
+    load()
+    return () => {
+      active = false
+    }
+  }, [recordId, attempt])
+  const back = recordId ? `/?record=${recordId}` : '/#projects'
+  if (!loaded)
+    return (
+      <main className="record-page">
+        <a className="record-back" href={back}>
+          ← 返回
+        </a>
+        {error ? (
+          <>
+            <p role="alert">{error}</p>
+            <button
+              onClick={() => {
+                setError('')
+                setAttempt((n) => n + 1)
+              }}
+            >
+              重新读取
+            </button>
+          </>
+        ) : (
+          <p role="status">正在准备编辑器…</p>
+        )}
+      </main>
+    )
+  if (loaded.signedOut)
+    return (
+      <main className="record-page">
+        <h1>请先登录</h1>
+        <a className="record-create-link" href="/?login=1">
+          去登录
+        </a>
+        <a href={back}>返回</a>
+      </main>
+    )
+  return (
+    <EditorForm
+      key={`${loaded.user.id}:${recordId || 'new'}`}
+      {...loaded}
+      back={back}
+    />
+  )
+}
+
+function EditorForm({ user, record, draft, back }) {
+  const baseline = {
+    title: record?.title || '',
+    tags: record?.tags.join(', ') || '',
+    content: record?.content || '',
+    removeCover: false,
+  }
+  const [form, setForm] = useState(baseline)
+  const [candidate, setCandidate] = useState(draft)
+  const [draftId, setDraftId] = useState(
+    () => draft?.recordId || record?.id || crypto.randomUUID(),
+  )
+  const [baseVersion, setBaseVersion] = useState(record?.version ?? null)
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState('')
+  const [uploadedPath, setUploadedPath] = useState(null)
+  const [pending, setPending] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [imageBusy, setImageBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [draftMessage, setDraftMessage] = useState('')
+  const [saved, setSaved] = useState(false)
+  const saving = useRef(false)
+  const completed = useRef(false)
+  const uploadIntent = useRef(draft?.uploadIntent || null)
+  const imageGeneration = useRef(0)
+  const input = useRef(null)
+  const key = draftKey(user.id, record?.id)
+  const dirty =
+    JSON.stringify(form) !== JSON.stringify(baseline) ||
+    !!file ||
+    !!uploadedPath ||
+    !!pending
+  const disabled = busy || !!pending || !!candidate
+
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview)
+    },
+    [preview],
+  )
+  useEffect(
+    () => () => {
+      imageGeneration.current += 1
+    },
+    [],
+  )
+  useEffect(() => {
+    if (candidate || saved) return
+    const timer = setTimeout(() => {
+      try {
+        if (!dirty) {
+          removeLocal(key)
+          return
+        }
+        writeLocal(key, {
+          form,
+          recordId: draftId,
+          baseVersion,
+          uploadedPath,
+          uploadIntent: uploadIntent.current,
+          pending,
+          savedAt: new Date().toISOString(),
+        })
+        setDraftMessage('文字草稿已保存在此浏览器。尚未上传的图片需重新选择。')
+      } catch {
+        setDraftMessage('本机草稿保存失败，可能存储空间不足，请复制重要内容。')
+      }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [
+    form,
+    dirty,
+    candidate,
+    saved,
+    key,
+    draftId,
+    baseVersion,
+    uploadedPath,
+    pending,
+  ])
+  useEffect(() => {
+    if (!dirty || saved) return
+    const warn = (event) => {
+      if (completed.current) return
+      try {
+        writeLocal(key, {
+          form,
+          recordId: draftId,
+          baseVersion,
+          uploadedPath,
+          uploadIntent: uploadIntent.current,
+          pending,
+          savedAt: new Date().toISOString(),
+        })
+      } catch {
+        /* the native leave warning still protects unsaved input */
+      }
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty, saved, key, form, draftId, baseVersion, uploadedPath, pending])
+
+  function persist(nextPending, path = uploadedPath) {
+    writeLocal(key, {
+      form,
+      recordId: draftId,
+      baseVersion,
+      uploadedPath: path,
+      uploadIntent: uploadIntent.current,
+      pending: nextPending,
+      savedAt: new Date().toISOString(),
+    })
+  }
+  async function recover() {
+    let recoveredPath = candidate.uploadedPath || null
+    if (!recoveredPath && candidate.uploadIntent) {
+      try {
+        const { data: exists, error } = await supabase.storage
+          .from('record-covers')
+          .exists(candidate.uploadIntent)
+        if (exists) recoveredPath = candidate.uploadIntent
+        else if (
+          error &&
+          !['400', '404'].includes(String(error.statusCode || error.status))
+        )
+          throw error
+      } catch (err) {
+        setMessage(
+          `无法确认上次图片上传结果：${errorText(err)} 请稍后再恢复草稿。`,
+        )
+        return
+      }
+    }
+    setForm({ ...EMPTY_FORM, ...candidate.form })
+    setDraftId(candidate.recordId)
+    setBaseVersion(candidate.baseVersion)
+    setUploadedPath(recoveredPath)
+    setPending(candidate.pending || null)
+    if (record && candidate.baseVersion !== record.version)
+      setMessage(
+        '这份草稿基于旧版本。请先复制需要的文字，再重新载入编辑，避免覆盖其他设备修改。',
+      )
+    setCandidate(null)
+  }
+  function discard() {
+    if (candidate?.pending) return
+    try {
+      if (candidate?.uploadedPath || candidate?.uploadIntent)
+        queueCleanup(user.id, candidate.uploadedPath || candidate.uploadIntent)
+      uploadIntent.current = null
+      removeLocal(key)
+      setCandidate(null)
+      if (!record) setDraftId(crypto.randomUUID())
+    } catch {
+      setMessage('无法清除本机草稿，请检查浏览器存储设置。')
+    }
+  }
+  async function chooseCover(event) {
+    const selected = event.target.files[0]
+    if (!selected) return
+    const generation = ++imageGeneration.current
+    setImageBusy(true)
+    setMessage('')
+    try {
+      const compressed = await prepareCover(selected)
+      if (generation !== imageGeneration.current) return
+      if (uploadedPath || uploadIntent.current)
+        queueCleanup(user.id, uploadedPath || uploadIntent.current)
+      uploadIntent.current = null
+      setUploadedPath(null)
+      setFile(compressed)
+      setPreview(URL.createObjectURL(compressed))
+      setForm((f) => ({ ...f, removeCover: false }))
+      setMessage(
+        `封面已处理：${Math.round(selected.size / 1024)} KB → ${Math.round(compressed.size / 1024)} KB。`,
+      )
+    } catch (err) {
+      if (generation === imageGeneration.current) setMessage(errorText(err))
+    } finally {
+      if (generation === imageGeneration.current) setImageBusy(false)
+    }
+  }
+  function removeCover() {
+    imageGeneration.current += 1
+    if (uploadedPath || uploadIntent.current)
+      queueCleanup(user.id, uploadedPath || uploadIntent.current)
+    uploadIntent.current = null
+    setUploadedPath(null)
+    setFile(null)
+    setPreview('')
+    setImageBusy(false)
+    setForm((f) => ({ ...f, removeCover: true }))
+    if (input.current) input.current.value = ''
+  }
+  async function submit(event) {
+    event.preventDefault()
+    if (saving.current || imageBusy || candidate) return
+    saving.current = true
+    setBusy(true)
+    setMessage('')
+    let request = pending
+    try {
+      const values = validateRecord(form)
+      const verified = await currentUser()
+      if (!verified || verified.id !== user.id)
+        throw new Error('账号状态已变化，请重新登录。草稿仍保留在原账号下。')
+      if (!request) {
+        let path = form.removeCover
+          ? null
+          : uploadedPath || record?.cover_path || null
+        if (file && !uploadedPath) {
+          setMessage('正在上传封面…')
+          path =
+            uploadIntent.current || `${user.id}/${crypto.randomUUID()}.webp`
+          uploadIntent.current = path
+          writeLocal(key, {
+            form,
+            recordId: draftId,
+            baseVersion,
+            uploadedPath: null,
+            uploadIntent: path,
+            savedAt: new Date().toISOString(),
+          })
+          const { error } = await supabase.storage
+            .from('record-covers')
+            .upload(path, file, { contentType: file.type, upsert: false })
+          if (error) {
+            if (String(error.statusCode) !== '409') throw error
+            const { data: exists, error: existsError } = await supabase.storage
+              .from('record-covers')
+              .exists(path)
+            if (existsError || !exists) throw error
+          }
+          setUploadedPath(path)
+          persist(null, path)
+        }
+        request = {
+          requestId: crypto.randomUUID(),
+          action: record ? 'update' : 'create',
+          recordId: draftId,
+          version: baseVersion,
+          ...values,
+          coverPath: path,
+        }
+        persist(request, path && path !== record?.cover_path ? path : null)
+        setPending(request)
+      }
+      setMessage('正在保存记录…')
+      const result = await mutateRecord(request)
+      setMessage('记录已保存，正在处理旧封面…')
+      let notice = ''
+      try {
+        if (
+          result.old_cover_path &&
+          result.old_cover_path !== result.record.cover_path
+        )
+          queueCleanup(user.id, result.old_cover_path)
+        const remaining = await cleanupFiles(user.id)
+        if (remaining)
+          notice = '记录已保存，旧图片清理尚未完成，可在列表中重试。'
+        removeLocal(key)
+      } catch {
+        notice = '记录已保存，本机草稿或旧图片清理未完成。'
+      }
+      completed.current = true
+      setSaved(true)
+      setPending(null)
+      window.location.assign(
+        `/?record=${result.record.id}${notice ? `&notice=${encodeURIComponent(notice)}` : ''}`,
+      )
+    } catch (err) {
+      if (err.code) {
+        setPending(null)
+        try {
+          persist(
+            null,
+            request?.coverPath && request.coverPath !== record?.cover_path
+              ? request.coverPath
+              : uploadedPath,
+          )
+        } catch {
+          /* leave saved draft intact */
+        }
+      }
+      setMessage(
+        `${errorText(err)}${request && !err.code ? ' 可重试上次保存；内容已锁定，避免产生重复记录。' : ''}`,
+      )
+    } finally {
+      saving.current = false
+      setBusy(false)
+    }
+  }
+  return (
+    <main className="record-page">
+      <a
+        className="record-back"
+        href={back}
+        onClick={(e) => {
+          if (!dirty || saved) return
+          if (
+            !window.confirm(
+              '尚有未保存内容，离开后可恢复本机文字草稿。仍要离开吗？',
+            )
+          ) {
+            e.preventDefault()
+            return
+          }
+          try {
+            persist(pending)
+            completed.current = true
+          } catch {
+            e.preventDefault()
+            setMessage('草稿保存失败，请先复制重要内容。')
+          }
+        }}
+      >
+        ← 返回{record ? '记录详情' : '项目记录'}
+      </a>
+      <div className="record-editor">
+        <h1>{record ? '编辑记录' : '新增记录'}</h1>
+        {candidate && (
+          <aside className="notice">
+            <p>
+              发现 {formatDate(candidate.savedAt)} 的本机草稿。
+              {candidate.pending ? '上次保存结果待确认，请恢复后重试。' : ''}
+            </p>
+            <div className="actions">
+              <button onClick={recover}>恢复草稿</button>
+              <button onClick={discard} disabled={!!candidate.pending}>
+                丢弃草稿
+              </button>
+            </div>
+          </aside>
+        )}
+        <form className="record-fields" onSubmit={submit}>
+          <label htmlFor="record-title">标题</label>
+          <input
+            id="record-title"
+            name="title"
+            maxLength={160}
+            required
+            disabled={disabled}
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
+          <label htmlFor="record-tags">
+            标签 <small>中英文逗号分隔，最多 12 个</small>
+          </label>
+          <input
+            id="record-tags"
+            name="tags"
+            disabled={disabled}
+            value={form.tags}
+            onChange={(e) => setForm({ ...form, tags: e.target.value })}
+          />
+          <label htmlFor="record-content">详细内容</label>
+          <textarea
+            id="record-content"
+            name="content"
+            rows={10}
+            maxLength={100000}
+            disabled={disabled}
+            value={form.content}
+            onChange={(e) => setForm({ ...form, content: e.target.value })}
+          />
+          <label htmlFor="record-cover">封面（可选）</label>
+          <input
+            ref={input}
+            id="record-cover"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            disabled={disabled || imageBusy}
+            onChange={chooseCover}
+          />
+          <small>
+            JPEG、PNG、WebP，原图不超过 5 MB；自动缩小至最长边 1600 像素并压缩。
+          </small>
+          {imageBusy && <p role="status">正在处理图片…</p>}
+          {preview ? (
+            <img className="cover-preview" src={preview} alt="将保存的封面" />
+          ) : !form.removeCover && (uploadedPath || record?.cover_path) ? (
+            <RecordThumbnail
+              key={uploadedPath || record.cover_path}
+              coverPath={uploadedPath || record.cover_path}
+            />
+          ) : null}
+          {(preview ||
+            uploadedPath ||
+            (record?.cover_path && !form.removeCover)) && (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={disabled || imageBusy}
+              onClick={removeCover}
+            >
+              移除封面
+            </button>
+          )}
+          {form.removeCover && <small>保存后将移除原封面。</small>}
+          <div className="actions">
+            <button
+              className="login-submit"
+              disabled={busy || imageBusy || !!candidate}
+              type="submit"
+            >
+              {busy
+                ? '正在保存…'
+                : pending
+                  ? '重试上次保存'
+                  : record
+                    ? '保存修改'
+                    : '保存记录'}
+            </button>
+          </div>
+          <p className="login-message" role="status">
+            {message}
+          </p>
+          <small role="status">{draftMessage}</small>
+          <small>
+            草稿仅保存在当前设备浏览器中，按账号隔离；不会同步到其他设备。
+          </small>
+        </form>
+      </div>
+    </main>
+  )
+}
