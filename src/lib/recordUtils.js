@@ -29,6 +29,8 @@ export function validateRecord(form) {
 }
 
 export function errorText(error) {
+  if (error?.code === '42501' && /邀请码|验证邮箱/.test(error?.message || ''))
+    return error.message
   if (['PGRST202', '42703', '42883'].includes(error?.code))
     return '云端功能尚未更新，请先执行项目中的数据库升级 SQL。'
   if (error?.code === '40001')

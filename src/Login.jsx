@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from './lib/supabaseClient.js'
 import { useAuth } from './lib/authContext.js'
 import { safeDestination } from './lib/navigation.js'
+import { authErrorText } from './lib/accountUtils.js'
 
 function Login() {
   const auth = useAuth()
@@ -32,7 +33,7 @@ function Login() {
       })
 
       if (error) {
-        setMessage(`登录失败：${error.message}`)
+        setMessage(`登录失败：${authErrorText(error)}`)
         return
       }
 
@@ -100,6 +101,17 @@ function Login() {
                 {message}
               </p>
             </form>
+            <div className="auth-links">
+              <a className="text-link" href="/?view=register">
+                注册账号
+              </a>
+              <a className="text-link" href="/?view=forgot-password">
+                忘记密码
+              </a>
+              <a className="text-link" href="/?view=verify-email">
+                验证邮箱
+              </a>
+            </div>
           </>
         )}
       </div>

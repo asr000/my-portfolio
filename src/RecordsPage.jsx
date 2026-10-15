@@ -1,7 +1,10 @@
 import RecordsLayout, { RecordsAccess } from './RecordsLayout.jsx'
 import RecordsList from './RecordsList.jsx'
+import { useNoteAccess } from './lib/useNoteAccess.js'
+import { NoteAccessMessage } from './NoteAccess.jsx'
 
 export default function RecordsPage() {
+  const access = useNoteAccess()
   return (
     <RecordsLayout
       title="我的记录"
@@ -13,9 +16,11 @@ export default function RecordsPage() {
         {() => (
           <>
             <nav className="records-page-nav" aria-label="记录功能">
-              <a className="record-create-link" href="/?new=1">
-                ＋ 新增记录
-              </a>
+              {access.data?.can_write && (
+                <a className="record-create-link" href="/?new=1">
+                  ＋ 新增记录
+                </a>
+              )}
               <div className="records-nav-links">
                 <a className="text-link" href="/?view=search">
                   搜索记录
@@ -25,6 +30,7 @@ export default function RecordsPage() {
                 </a>
               </div>
             </nav>
+            {!access.data?.can_write && <NoteAccessMessage access={access} />}
             <RecordsList returnTo="/?view=records" />
           </>
         )}

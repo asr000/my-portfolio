@@ -15,9 +15,12 @@ import { loginLink } from './lib/navigation.js'
 import { HERO_TITLE, HERO_NOTE, HERO_LINK_LABEL } from './lib/heroText.js'
 import Account from './Account.jsx'
 import PublicRecord from './PublicRecord.jsx'
+import NoteWriteAccess from './NoteAccess.jsx'
 
 const DataBackup = lazy(() => import('./DataBackup.jsx'))
 const MarkdownHelp = lazy(() => import('./MarkdownHelp.jsx'))
+const AuthPages = lazy(() => import('./AuthPages.jsx'))
+const Invitations = lazy(() => import('./Invitations.jsx'))
 
 function Header() {
   const auth = useAuth()
@@ -50,6 +53,34 @@ function Pages() {
   const isLoggingIn = params.get('login') === '1'
   const view = params.get('view')
 
+  if (
+    auth.recovery ||
+    [
+      'reset-password',
+      'register',
+      'verify-email',
+      'forgot-password',
+      'auth-confirm',
+      'activate',
+      'invitations',
+    ].includes(view)
+  )
+    return (
+      <Suspense
+        fallback={
+          <main className="record-page">
+            <p role="status">正在准备账号页面…</p>
+          </main>
+        }
+      >
+        {auth.recovery || !['activate', 'invitations'].includes(view) ? (
+          <AuthPages view={auth.recovery ? 'reset-password' : view} />
+        ) : (
+          <Invitations manage={view === 'invitations'} />
+        )}
+      </Suspense>
+    )
+
   if (publicId !== null) return <PublicRecord recordId={publicId} />
   if (view === 'showcase') return <SearchRecords publicView />
 
@@ -60,7 +91,9 @@ function Pages() {
   if (isCreating) {
     return (
       <RequireAccount>
-        <NewRecord />
+        <NoteWriteAccess>
+          <NewRecord />
+        </NoteWriteAccess>
       </RequireAccount>
     )
   }
@@ -68,7 +101,9 @@ function Pages() {
   if (editId !== null) {
     return (
       <RequireAccount>
-        <EditRecord recordId={editId} key={editId} />
+        <NoteWriteAccess>
+          <EditRecord recordId={editId} key={editId} />
+        </NoteWriteAccess>
       </RequireAccount>
     )
   }
@@ -84,10 +119,13 @@ function Pages() {
       return <PublicRecord recordId={recordId} />
     return (
       <RequireAccount>
-        <RecordDetail
-          recordId={recordId}
-          manage={params.get('manage') === '1'}
-        />
+        {params.get('manage') === '1' ? (
+          <NoteWriteAccess>
+            <RecordDetail recordId={recordId} manage />
+          </NoteWriteAccess>
+        ) : (
+          <RecordDetail recordId={recordId} />
+        )}
       </RequireAccount>
     )
   }

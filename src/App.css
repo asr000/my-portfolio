@@ -880,6 +880,41 @@ small,
   font-size: 24px;
   overflow-wrap: anywhere;
 }
+.auth-form {
+  max-width: 560px;
+}
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+}
+.invitation-list {
+  display: grid;
+  gap: 12px;
+}
+.invitation-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #49677f;
+  border-radius: 12px;
+}
+.invitation-row p {
+  margin: 8px 0;
+  font-size: 15px;
+}
+.record-fields select {
+  padding: 12px;
+  border: 1px solid #68859b;
+  border-radius: 8px;
+  background: #1f2b37;
+  color: #d8e5ed;
+  font: inherit;
+}
 @media (max-width: 600px) {
   .site-header {
     padding: 20px;

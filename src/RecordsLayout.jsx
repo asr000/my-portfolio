@@ -29,7 +29,7 @@ export default function RecordsLayout({
                 : loginLink(window.location.pathname + window.location.search)
             }
           >
-            {auth.user ? '我的记录' : '作者登录'}
+            {auth.user ? '我的记录' : '登录 / 注册'}
           </a>
         ) : (
           params.get('view') !== 'account' && (

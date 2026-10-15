@@ -3,6 +3,7 @@ import { AuthContext, isSessionError } from './lib/authContext.js'
 import { supabase } from './lib/supabaseClient.js'
 import { currentUser } from './lib/recordsApi.js'
 import { errorText } from './lib/recordUtils.js'
+import { initialAuthCallback } from './lib/authCallback.js'
 
 export default function AuthProvider({ children }) {
   const [state, setState] = useState({
@@ -11,6 +12,9 @@ export default function AuthProvider({ children }) {
     message: '',
   })
   const generation = useRef(0)
+  const [recovery, setRecovery] = useState(
+    initialAuthCallback.recovery && !initialAuthCallback.failed,
+  )
   const refresh = useCallback(async () => {
     const request = ++generation.current
     try {
@@ -46,6 +50,8 @@ export default function AuthProvider({ children }) {
         return
       }
       invalidate()
+      if (event === 'SIGNED_OUT') setRecovery(false)
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
       if (event === 'SIGNED_OUT')
         setState({
           user: null,
@@ -62,7 +68,13 @@ export default function AuthProvider({ children }) {
     }
   }, [refresh, invalidate])
   return (
-    <AuthContext.Provider value={{ ...state, refresh: retry }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        refresh: retry,
+        recovery,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
