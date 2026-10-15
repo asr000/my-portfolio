@@ -11,6 +11,8 @@ import { errorText, formatDate } from './lib/recordUtils.js'
 import { useCover } from './lib/useCover.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import { listReturn, loginLink, recordLink } from './lib/navigation.js'
+import { supabase } from './lib/supabaseClient.js'
+import PublicRecord from './PublicRecord.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
@@ -24,6 +26,10 @@ export default function RecordDetail({ recordId, manage = false }) {
   const [busy, setBusy] = useState(false)
   const [reload, setReload] = useState(0)
   const [pending, setPending] = useState(null)
+  const [canPublish, setCanPublish] = useState(null)
+  const [publicationError, setPublicationError] = useState('')
+  const [copyMessage, setCopyMessage] = useState('')
+  const [needsReload, setNeedsReload] = useState(false)
   const locked = useRef(false)
   const cover = useCover(manage ? null : record?.cover_path)
   const params = new URLSearchParams(window.location.search)
@@ -33,6 +39,11 @@ export default function RecordDetail({ recordId, manage = false }) {
   )
   const detailHref = recordLink(recordId, { back })
   const manageHref = recordLink(recordId, { back, manage: true })
+  const publicHref = recordLink(recordId, {
+    publicView: true,
+    back: '/?view=showcase',
+  })
+  const publicUrl = new URL(publicHref, window.location.origin).href
   useEffect(() => {
     let active = true
     async function load() {
@@ -49,7 +60,16 @@ export default function RecordDetail({ recordId, manage = false }) {
         const data = await getRecord(recordId)
         if (active) {
           setRecord(data)
-          setStatus(data ? 'ready' : 'not-found')
+          setStatus(data ? 'ready' : manage ? 'not-found' : 'public')
+        }
+        if (manage && data) {
+          const { data: allowed, error } = await supabase
+            .rpc('is_portfolio_author')
+            .retry(false)
+          if (active) {
+            setCanPublish(!error && !!allowed)
+            setPublicationError(error ? errorText(error) : '')
+          }
         }
       } catch (err) {
         if (active) {
@@ -62,12 +82,13 @@ export default function RecordDetail({ recordId, manage = false }) {
     return () => {
       active = false
     }
-  }, [recordId, reload])
+  }, [recordId, reload, manage])
   async function act(action) {
     if (locked.current) return
     locked.current = true
     setBusy(true)
     setActionMessage('')
+    setNeedsReload(false)
     const key = `action:${user.id}:${recordId}`
     const request = pending || {
       requestId: crypto.randomUUID(),
@@ -87,7 +108,10 @@ export default function RecordDetail({ recordId, manage = false }) {
       setPending(null)
       let notice = ''
       try {
-        if (await cleanupFiles(user.id))
+        if (
+          !['publish', 'unpublish'].includes(request.action) &&
+          (await cleanupFiles(user.id))
+        )
           notice =
             '记录操作成功，部分旧图片仍待清理，可前往记录管理中的封面清理重试。'
       } catch {
@@ -101,7 +125,15 @@ export default function RecordDetail({ recordId, manage = false }) {
       } else {
         setRecord(result.record)
         setDialog(null)
-        setActionMessage(notice || '记录已恢复。')
+        setActionMessage(
+          notice ||
+            (request.action === 'publish'
+              ? '记录已公开，可以复制公开链接分享。'
+              : request.action === 'unpublish'
+                ? '已取消公开，记录仅自己可见。'
+                : '记录已恢复，保持仅自己可见。'),
+        )
+        setCopyMessage('')
       }
     } catch (err) {
       if (err.code) {
@@ -112,8 +144,11 @@ export default function RecordDetail({ recordId, manage = false }) {
           /* retain retry receipt */
         }
       }
+      setNeedsReload(err.code === '40001')
       setActionMessage(
-        `${errorText(err)}${!err.code ? ' 如结果不确定，请重试原操作。' : ''}`,
+        err.code === '40001'
+          ? '记录已在其他页面或设备修改，请重新读取记录后再操作。'
+          : `${errorText(err)}${!err.code ? ' 如结果不确定，请重试原操作。' : ''}`,
       )
       setDialog(null)
     } finally {
@@ -121,7 +156,16 @@ export default function RecordDetail({ recordId, manage = false }) {
       setBusy(false)
     }
   }
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(publicUrl)
+      setCopyMessage('公开链接已复制。')
+    } catch {
+      setCopyMessage('未能自动复制，请选中下方链接手动复制。')
+    }
+  }
   const notice = new URLSearchParams(window.location.search).get('notice')
+  if (status === 'public') return <PublicRecord recordId={recordId} />
   return (
     <main className="record-page">
       <a className="record-back" href={manage && record ? detailHref : back}>
@@ -165,6 +209,20 @@ export default function RecordDetail({ recordId, manage = false }) {
       {actionMessage && (
         <p className="notice" role="status">
           {actionMessage}
+          {needsReload && (
+            <button
+              disabled={busy}
+              onClick={() => {
+                setActionMessage('')
+                setNeedsReload(false)
+                setStatus('loading')
+                setCanPublish(null)
+                setReload((n) => n + 1)
+              }}
+            >
+              重新读取记录
+            </button>
+          )}
         </p>
       )}
       {record && status === 'ready' && (
@@ -224,6 +282,69 @@ export default function RecordDetail({ recordId, manage = false }) {
                   </>
                 )}
               </div>
+              {!record.deleted_at && (
+                <section className="publication-settings" aria-label="公开设置">
+                  <h2>公开展示</h2>
+                  <p className="helper">
+                    {record.is_public
+                      ? '当前已公开：访客无需登录即可阅读。后续保存的修改也会更新公开内容。'
+                      : '当前仅自己可见。公开后，标题、标签、正文和封面会向访客展示。'}
+                  </p>
+                  {publicationError ? (
+                    <p role="alert">
+                      公开设置暂不可用：{publicationError}{' '}
+                      <button onClick={() => setReload((n) => n + 1)}>
+                        重试公开设置
+                      </button>
+                    </p>
+                  ) : canPublish === null ? (
+                    <p role="status">正在读取公开设置…</p>
+                  ) : canPublish ? (
+                    <button
+                      className={record.is_public ? 'secondary-button' : ''}
+                      disabled={busy || !!pending}
+                      onClick={() =>
+                        setDialog(record.is_public ? 'unpublish' : 'publish')
+                      }
+                    >
+                      {record.is_public ? '取消公开' : '公开展示'}
+                    </button>
+                  ) : (
+                    <p className="helper">
+                      此账号的记录保持私密。公开展示由网站作者管理。
+                    </p>
+                  )}
+                  {record.is_public && (
+                    <div className="share-link-field">
+                      <a
+                        className="text-link"
+                        href={publicHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        查看公开页面 ↗
+                      </a>
+                      <label htmlFor="public-record-url">公开链接</label>
+                      <input
+                        id="public-record-url"
+                        readOnly
+                        value={publicUrl}
+                        onFocus={(event) => event.target.select()}
+                      />
+                      <button
+                        className="secondary-button"
+                        disabled={busy || !!pending}
+                        onClick={copyLink}
+                      >
+                        复制公开链接
+                      </button>
+                      {copyMessage && (
+                        <small role="status">{copyMessage}</small>
+                      )}
+                    </div>
+                  )}
+                </section>
+              )}
             </>
           ) : (
             <>
@@ -272,16 +393,34 @@ export default function RecordDetail({ recordId, manage = false }) {
       )}
       {dialog && (
         <ConfirmDialog
-          title={dialog === 'purge' ? '彻底删除这条记录？' : '移入回收站？'}
+          title={
+            {
+              purge: '彻底删除这条记录？',
+              trash: '移入回收站？',
+              publish: '公开展示这条记录？',
+              unpublish: '取消公开展示？',
+            }[dialog]
+          }
           busy={busy}
           onClose={() => setDialog(null)}
           onConfirm={() => act(dialog)}
-          confirmLabel={dialog === 'purge' ? '彻底删除' : '移入回收站'}
+          confirmLabel={
+            {
+              purge: '彻底删除',
+              trash: '移入回收站',
+              publish: '确认公开',
+              unpublish: '取消公开',
+            }[dialog]
+          }
         >
           <p>
-            {dialog === 'purge'
-              ? '这将永久删除记录，并清理不再使用的封面，无法恢复。'
-              : '记录将从列表隐藏。你可以在回收站恢复，封面也会保留。'}
+            {dialog === 'publish'
+              ? `“${record.title}”的标题、标签、正文和封面会向所有访客展示。之后保存的修改也会同步到公开页面。`
+              : dialog === 'unpublish'
+                ? '取消后不再向访客提供这条练习。已被他人保存的内容无法收回。'
+                : dialog === 'purge'
+                  ? '这将永久删除记录，并清理不再使用的封面，无法恢复。'
+                  : '记录将从列表隐藏。你可以在回收站恢复，封面也会保留。'}
           </p>
         </ConfirmDialog>
       )}

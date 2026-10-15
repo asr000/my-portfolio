@@ -17,7 +17,7 @@ async function readRecords(user, includeTrash, signal, progress) {
     let request = supabase
       .from('records')
       .select(
-        'id,user_id,title,tags,content,cover_path,created_at,updated_at,deleted_at,version',
+        'id,user_id,title,tags,content,cover_path,created_at,updated_at,deleted_at,version,is_public',
       )
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })

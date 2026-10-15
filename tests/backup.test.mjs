@@ -12,6 +12,7 @@ test('backup preserves record content and trash metadata without copying session
     cover_path: 'owner/cover.png',
     deleted_at: '2026-10-15',
     version: 4,
+    is_public: true,
     access_token: 'never-export',
   }
   const result = backupDocument(
@@ -23,6 +24,7 @@ test('backup preserves record content and trash metadata without copying session
   assert.equal(result.records[0].content, '# 正文')
   assert.equal(result.records[0].deleted_at, '2026-10-15')
   assert.equal(result.records[0].version, 4)
+  assert.equal(result.records[0].is_public, true)
   assert.equal(JSON.stringify(result).includes('never-export'), false)
 })
 

@@ -1,7 +1,7 @@
 import { useCover } from './lib/useCover.js'
 
-export default function RecordThumbnail({ coverPath }) {
-  const cover = useCover(coverPath)
+export default function RecordThumbnail({ coverPath, publicAccess = false }) {
+  const cover = useCover(coverPath, { publicAccess })
   return (
     <span className="record-thumbnail">
       {cover.url && !cover.error ? (

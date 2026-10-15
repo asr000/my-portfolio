@@ -4,18 +4,29 @@ import { errorText } from './lib/recordUtils.js'
 import RecordsLayout, { RecordsAccess } from './RecordsLayout.jsx'
 import RecordsList from './RecordsList.jsx'
 
-export default function SearchRecords() {
+export default function SearchRecords({ publicView = false }) {
   return (
     <RecordsLayout
-      title="搜索记录"
-      description="按标题和标签，找回某一次记录。"
+      title={publicView ? '练习展示' : '搜索记录'}
+      description={
+        publicView
+          ? '已经公开的项目与学习记录，无需登录即可阅读。'
+          : '按标题和标签，找回某一次记录。'
+      }
+      publicPage={publicView}
+      back={publicView ? '/#projects' : '/?view=records'}
+      backLabel={publicView ? '返回首页' : '返回记录列表'}
     >
-      <RecordsAccess>{(user) => <SearchForm key={user.id} />}</RecordsAccess>
+      {publicView ? (
+        <SearchForm publicView />
+      ) : (
+        <RecordsAccess>{(user) => <SearchForm key={user.id} />}</RecordsAccess>
+      )}
     </RecordsLayout>
   )
 }
 
-function SearchForm() {
+function SearchForm({ publicView = false }) {
   const params = new URLSearchParams(window.location.search)
   const query = (params.get('q') || '').trim()
   const tag = params.get('tag') || ''
@@ -25,7 +36,10 @@ function SearchForm() {
   useEffect(() => {
     let active = true
     supabase
-      .rpc('record_tags', { p_trash: false })
+      .rpc(
+        publicView ? 'public_record_tags' : 'record_tags',
+        publicView ? {} : { p_trash: false },
+      )
       .retry(false)
       .then(({ data, error }) => {
         if (!active) return
@@ -42,12 +56,13 @@ function SearchForm() {
     return () => {
       active = false
     }
-  }, [attempt])
-  const returnTo = `/?${new URLSearchParams({ view: 'search', ...(query && { q: query }), ...(tag && { tag }) })}`
+  }, [attempt, publicView])
+  const view = publicView ? 'showcase' : 'search'
+  const returnTo = `/?${new URLSearchParams({ view, ...(query && { q: query }), ...(tag && { tag }) })}`
   return (
     <>
       <form className="record-search-panel" action="/" method="get">
-        <input type="hidden" name="view" value="search" />
+        <input type="hidden" name="view" value={view} />
         <label htmlFor="record-search">搜索标题</label>
         <input
           id="record-search"
@@ -69,7 +84,7 @@ function SearchForm() {
         <div className="actions">
           <button type="submit">搜索</button>
           {(query || tag) && (
-            <a className="text-link" href="/?view=search">
+            <a className="text-link" href={`/?view=${view}`}>
               清除筛选
             </a>
           )}
@@ -82,9 +97,14 @@ function SearchForm() {
         </p>
       )}
       <h2 className="results-heading">
-        {query || tag ? '搜索结果' : '全部记录'}
+        {query || tag ? '搜索结果' : publicView ? '公开练习' : '全部记录'}
       </h2>
-      <RecordsList query={query} tag={tag} returnTo={returnTo} />
+      <RecordsList
+        query={query}
+        tag={tag}
+        returnTo={returnTo}
+        publicView={publicView}
+      />
     </>
   )
 }

@@ -10,10 +10,10 @@ export function listReturn(value, fallback = 'records') {
   if (target.origin !== base || target.pathname !== '/')
     return `/?view=${fallback}`
   const view = target.searchParams.get('view')
-  if (!['records', 'search', 'trash'].includes(view))
+  if (!['records', 'search', 'trash', 'showcase'].includes(view))
     return `/?view=${fallback}`
   const params = new URLSearchParams({ view })
-  if (view === 'search') {
+  if (view === 'search' || view === 'showcase') {
     for (const key of ['q', 'tag']) {
       const filter = target.searchParams.get(key)
       if (filter) params.set(key, filter)
@@ -24,8 +24,10 @@ export function listReturn(value, fallback = 'records') {
 
 export function recordLink(
   id,
-  { back, manage = false, edit = false, notice } = {},
+  { back, manage = false, edit = false, publicView = false, notice } = {},
 ) {
+  if (publicView)
+    return `/?${new URLSearchParams({ show: id, back: listReturn(back, 'showcase') })}`
   const params = new URLSearchParams({ [edit ? 'edit' : 'record']: id })
   if (manage) params.set('manage', '1')
   params.set('back', listReturn(back))

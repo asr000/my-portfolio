@@ -14,6 +14,7 @@ import { useAuth } from './lib/authContext.js'
 import { loginLink } from './lib/navigation.js'
 import { HERO_TITLE, HERO_NOTE, HERO_LINK_LABEL } from './lib/heroText.js'
 import Account from './Account.jsx'
+import PublicRecord from './PublicRecord.jsx'
 
 const DataBackup = lazy(() => import('./DataBackup.jsx'))
 const MarkdownHelp = lazy(() => import('./MarkdownHelp.jsx'))
@@ -28,8 +29,9 @@ function Header() {
 
       <nav aria-label="主导航">
         <a href="#about">关于我</a>
-        <a href="/?view=records">项目</a>
+        <a href="/?view=showcase">练习</a>
         <a href="#contact">联系我</a>
+        {auth.user && <a href="/?view=records">我的记录</a>}
         <a href={auth.user ? '/?view=account' : loginLink('/')}>
           {auth.status === 'loading' ? '账号' : auth.user ? '我的账号' : '登录'}
         </a>
@@ -39,12 +41,17 @@ function Header() {
 }
 
 function Pages() {
+  const auth = useAuth()
   const params = new URLSearchParams(window.location.search)
   const recordId = params.get('record')
+  const publicId = params.get('show')
   const editId = params.get('edit')
   const isCreating = params.get('new') === '1'
   const isLoggingIn = params.get('login') === '1'
   const view = params.get('view')
+
+  if (publicId !== null) return <PublicRecord recordId={publicId} />
+  if (view === 'showcase') return <SearchRecords publicView />
 
   if (isLoggingIn) {
     return <Login />
@@ -67,6 +74,14 @@ function Pages() {
   }
 
   if (recordId !== null) {
+    if (params.get('manage') !== '1' && auth.status === 'loading')
+      return (
+        <main className="record-page">
+          <p role="status">正在准备记录…</p>
+        </main>
+      )
+    if (params.get('manage') !== '1' && !auth.user)
+      return <PublicRecord recordId={recordId} />
     return (
       <RequireAccount>
         <RecordDetail
@@ -122,7 +137,7 @@ function Pages() {
 
           <p>{HERO_NOTE}</p>
 
-          <a className="hero-link" href="/?view=records">
+          <a className="hero-link" href="/?view=showcase">
             {HERO_LINK_LABEL}
           </a>
         </section>

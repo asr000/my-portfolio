@@ -14,6 +14,7 @@ export default function RecordsList({
   tag = '',
   trash = false,
   preview = false,
+  publicView = false,
   returnTo = '/?view=records',
 }) {
   const pageSize = PAGE_SIZE
@@ -25,6 +26,19 @@ export default function RecordsList({
   const active = useRef(true)
   const loading = useRef(false)
   async function fetchPage(last) {
+    if (publicView) {
+      const { data, error } = await supabase
+        .rpc('public_records', {
+          p_query: query,
+          p_tag: tag,
+          p_limit: pageSize + 1,
+          p_before_created_at: last?.created_at || null,
+          p_before_id: last?.id || null,
+        })
+        .retry(false)
+      if (error) throw error
+      return data
+    }
     let request = supabase
       .from('records')
       .select('id,title,tags,cover_path,created_at,deleted_at')
@@ -99,7 +113,9 @@ export default function RecordsList({
             ? '没有符合筛选条件的记录。'
             : trash
               ? '回收站是空的。'
-              : '还没有记录，写下第一条吧。'}
+              : publicView
+                ? '还没有公开展示的练习。'
+                : '还没有记录，写下第一条吧。'}
         </p>
       )}
       <div
@@ -124,12 +140,13 @@ export default function RecordsList({
         {records.map((record) => (
           <a
             className="record-card"
-            href={recordLink(record.id, { back: returnTo })}
+            href={recordLink(record.id, { back: returnTo, publicView })}
             key={record.id}
           >
             <RecordThumbnail
               key={record.cover_path || record.id}
               coverPath={record.cover_path}
+              publicAccess={publicView}
             />
             <span className="record-card-info">
               <span className="record-title">{record.title}</span>

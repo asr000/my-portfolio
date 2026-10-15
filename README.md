@@ -4,6 +4,9 @@ React + Vite 个人记录网站。Supabase 提供账号、数据库和私有图�
 
 ## 本次实现
 
+- 选择性公开练习：现有和新增记录默认私密；作者在单条记录的管理页确认公开，访客无需登录即可阅读标题、标签、Markdown 正文和封面。
+- 首页展示公开练习；“练习展示”提供公开搜索和标签筛选；“我的记录”、编辑、回收站、备份继续按登录账号隔离。
+- 每条公开练习有独立分享链接，支持复制、取消公开；移入回收站自动取消公开，恢复后保持私密。
 - 首页字体由 25,575,676 字节的完整 TTF 改为 13,820 字节的 WOFF2 子集；完整原文件保留在 `resources/fonts/`，不进入网站发布目录。
 - 账号页显示当前邮箱，支持仅退出当前设备；登录后返回原页面，会话变化同步到其他标签页，退出时保留本机文字草稿。
 - 数据备份页可导出 JSON，或导出包含封面的 ZIP；可选择包含回收站，按云端分页读取，不受列表已加载条数限制。
@@ -17,7 +20,7 @@ React + Vite 个人记录网站。Supabase 提供账号、数据库和私有图�
 - 编辑检查版本，另一台设备修改后不会静默覆盖。
 - JPEG/PNG/WebP 封面更换和移除；限制原图 5 MB，最长边压缩到 1600 像素。
 - 只有记录保存成功后才清理旧封面；失败进入本机清理队列，列表可重试。
-- 私有图片使用一小时签名链接，页面打开期间约 50 分钟刷新一次。
+- 自己阅读私密记录时，图片使用一小时签名链接，页面打开期间约 50 分钟刷新一次。访客封面通过受权限检查的下载接口读取，不使用公开存储桶。
 - 新增和编辑的文字草稿按账号隔离、在本机保存，支持恢复和丢弃，离开前提示。
 - 草稿不跨设备同步。未上传的本地图片不会保存到草稿，需要重新选择。
 
@@ -32,6 +35,22 @@ React + Vite 个人记录网站。Supabase 提供账号、数据库和私有图�
 5. 在手机和电脑用同一账号测试，在不同账号之间验证不能访问彼此的记录。
 
 升级脚本限制为只读表 + 用户专用写入函数，仍须在真实项目中确认账号隔离。后台 SQL Editor 使用管理员权限，不能用其“能读到所有行”来判断网页的 RLS 是否失败。
+
+### 启用公开练习
+
+1. 已完成上述升级后，在 Supabase SQL Editor 完整执行 `supabase/migrations/20261016_public_showcase.sql`，再发布新版前端。仅推送 GitHub 不会执行数据库脚本。
+2. 脚本增加 `is_public` 字段和限定的公开读取接口，现有记录保持私密。脚本可以重复运行；重跑不会清除已明确设置的公开状态。
+3. `record-covers` 必须是 Private 桶。脚本发现 Public 桶会停止，避免私密图片可以绕过权限直接下载。
+4. 网站仅有一位作者。脚本从已有记录的唯一所属账号确定作者；没有记录时使用唯一的 Auth 账号。若存在多个候选，会停止并要求在脚本的 `author_email text := ''` 中填写作者的登录邮箱，再完整运行。网页不能自行更改作者身份。
+5. 新版上线后，登录作者账号，进入“我的记录 → 一条记录 → 管理记录 → 公开展示”，阅读确认内容后点击“确认公开”。可复制公开链接，或点击“查看公开页面”检查展示效果。
+6. 使用无痕窗口验证公开列表、正文和封面；私密记录和回收站记录不会展示。点击“取消公开”后，再次打开或刷新分享链接，应显示不可用。移入回收站也会撤回，恢复后需要另行确认公开。
+7. 公开后的后续编辑直接更新公开内容；页面会显示提示。取消公开只阻止新的授权读取，不能收回已经被他人浏览、下载或保存的内容。
+
+公开目录使用 `/?view=showcase`，分享详情使用 `/?show=记录编号`。原有 `/?record=记录编号` 链接会优先供作者阅读自己的记录，访客只能读取其中已公开的记录。
+
+数据库升级按日期顺序执行。启用公开功能后，如需重跑旧升级脚本，必须紧接着重跑公开升级脚本，以恢复公开封面的权限规则。
+
+可以运行 `node scripts/check-public-cloud.mjs` 做匿名只读检查。输出仅包含状态、错误码和最多一条结果的计数，不打印记录内容或密钥；它不能替代真实账号和图片服务的完整验证。
 
 ## 本地运行
 
@@ -57,19 +76,19 @@ npm run build
 - `npm run test:browser` 用本机 Chrome 跑交互测试。需要已安装 Google Chrome；没有 Chrome 时，可在 Playwright 配置选择安装好的浏览器。
 - 浏览器测试使用隔离的模拟 Supabase 服务，不访问真实账号或记录，不能替代上线后的真实联调。
 - 数据库测试中的 Auth、Storage 元数据和登录上下文在本地构造，不代表 Supabase Storage HTTP 服务也已经真实验证。
-- 浏览器检查覆盖登录返回、过期会话、跨标签页退出、草稿保留、206 条记录分批导出、ZIP 封面内容、取消与失败、Markdown 安全显示及字体请求大小。
+- 浏览器检查覆盖公开阅读与封面、公开确认与撤回、分享链接、重复公开请求、其他账号边界，以及登录返回、过期会话、跨标签页退出、草稿保留、206 条记录分批导出、ZIP 封面内容、取消与失败、Markdown 安全显示及字体请求大小。
 
 ## 账号、备份与 Markdown 的使用
 
 - 首页右上角和记录页面右上角可进入“我的账号”；退出使用 Supabase 的 `scope: 'local'`，其他设备继续保持登录。
 - “记录管理 → 数据备份”或账号页的备份链接进入导出。选择 JSON 或 ZIP，点击“生成备份”，完成后再点击“下载备份”。
-- JSON 包含记录文字、标签、创建和更新时间、版本、封面云端路径与回收站状态。ZIP 另含 `covers/` 和 `README.txt`，每条记录的 `cover_file` 指向 ZIP 内封面。
+- JSON 包含记录文字、标签、创建和更新时间、版本、封面云端路径、公开状态与回收站状态。ZIP 另含 `covers/` 和 `README.txt`，每条记录的 `cover_file` 指向 ZIP 内封面。
 - 单次备份最多 50 MB。读取记录或封面失败时显示错误，不把不完整 ZIP 作为成功备份提供下载。
 - 导出不包含登录凭证、本机未保存草稿或 Markdown 引用的外部图片。当前提供导出和本地解压查看，尚无自动导入入口。
 - 备份读取多页记录，不是数据库事务快照；导出期间请避免在其他设备批量增删改记录。
 - 编辑器点击“预览”查看排版，点击“写作”继续修改；“写作说明”在新标签页打开，保留当前编辑内容。
 - Markdown 原文仍保存在原有 `content` 字段，已有记录保留原文。原始 HTML 不执行，危险 URL 使用渲染器默认规则过滤；未知代码语言以普通代码显示。
-- 本次账号、备份和正文排版更新不增加数据库字段；已经执行过原有升级脚本的项目无需再次运行 SQL。
+- 账号和正文排版沿用原有数据。公开功能和备份中的公开状态需要先执行 `20261016_public_showcase.sql`。
 
 ## 重建首页字体
 
@@ -85,7 +104,7 @@ npm run build
 
 脚本覆盖全部首页主视觉文案及可打印 ASCII，检查字形是否齐全。生成的 `src/assets/fonts/portfolio-hero.woff2` 需要随源码提交，Netlify 构建无需安装 Python。Vite 为字体生成内容哈希文件名，沿用 `/assets/` 缓存规则。
 
-实现参考：[fontTools 字体裁剪](https://fonttools.readthedocs.io/en/stable/subset/)、[Supabase 当前设备退出](https://supabase.com/docs/reference/javascript/auth-signout)、[react-markdown 安全说明](https://github.com/remarkjs/react-markdown#security)、[fflate ZIP 文档](https://github.com/101arrowz/fflate)。
+实现参考：[fontTools 字体裁剪](https://fonttools.readthedocs.io/en/stable/subset/)、[Supabase 当前设备退出](https://supabase.com/docs/reference/javascript/auth-signout)、[私有存储桶权限](https://supabase.com/docs/guides/storage/buckets/fundamentals)、[受权限检查的文件下载](https://supabase.com/docs/reference/javascript/storage-from-download)、[数据库函数与权限](https://supabase.com/docs/guides/database/functions)、[react-markdown 安全说明](https://github.com/remarkjs/react-markdown#security)、[fflate ZIP 文档](https://github.com/101arrowz/fflate)。
 
 ## 发布
 

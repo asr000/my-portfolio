@@ -22,6 +22,7 @@ export function backupDocument(
       updated_at: record.updated_at,
       deleted_at: record.deleted_at,
       version: record.version,
+      is_public: record.is_public ?? false,
     })),
   }
 }

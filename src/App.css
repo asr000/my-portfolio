@@ -834,6 +834,47 @@ small,
   color: #b8c8d4;
   font-size: 13px;
 }
+.record-article .publication-settings {
+  margin-top: 36px;
+  padding: 24px;
+  border: 1px solid #49677f;
+  border-radius: 12px;
+  background: #243f56;
+}
+.publication-settings h2 {
+  font-size: 20px;
+}
+.record-article .publication-settings .helper {
+  font-size: 15px;
+}
+.share-link-field {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+.share-link-field label {
+  color: #e3edf2;
+  font-size: 14px;
+}
+.share-link-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #68859b;
+  border-radius: 8px;
+  background: #1f2b37;
+  color: #d8e5ed;
+  font: inherit;
+}
+.share-link-field button {
+  justify-self: start;
+}
+.public-record-article {
+  margin-top: 0;
+}
+.public-record-content {
+  margin-top: 32px;
+}
 .managed-record-title {
   margin-top: 28px;
   font-size: 24px;

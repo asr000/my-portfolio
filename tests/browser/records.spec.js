@@ -20,6 +20,7 @@ const row = (extra = {}) => ({
   updated_at: '2026-10-15T00:00:00.000Z',
   version: 1,
   deleted_at: null,
+  is_public: false,
   ...extra,
 })
 
@@ -34,6 +35,8 @@ async function setup(page, records = [row()], options = {}) {
     logoutScopes: [],
     listRequests: [],
     failCover: false,
+    authorId: USER,
+    publicRequests: [],
   }
   await page.addInitScript(
     ({ user, signedOut }) => {
@@ -65,11 +68,19 @@ async function setup(page, records = [row()], options = {}) {
         JSON.stringify(session),
       )
     },
-    { user: USER, signedOut: !!options.signedOut },
+    { user: options.user || USER, signedOut: !!options.signedOut },
   )
   await page.route('https://portfolio-test.supabase.co/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
+    const actor = request.headers().authorization?.startsWith('Bearer test.')
+      ? JSON.parse(
+          Buffer.from(
+            request.headers().authorization.split('.')[1],
+            'base64url',
+          ).toString(),
+        ).sub
+      : null
     const json = (data, status = 200) =>
       route.fulfill({
         status,
@@ -98,7 +109,7 @@ async function setup(page, records = [row()], options = {}) {
         )
       const body = Buffer.from(
         JSON.stringify({
-          sub: USER,
+          sub: options.user || USER,
           exp: Math.floor(Date.now() / 1000) + 3600,
           role: 'authenticated',
         }),
@@ -109,7 +120,7 @@ async function setup(page, records = [row()], options = {}) {
         expires_in: 3600,
         token_type: 'bearer',
         user: {
-          id: USER,
+          id: options.user || USER,
           email: 'test@example.invalid',
           aud: 'authenticated',
           role: 'authenticated',
@@ -120,17 +131,21 @@ async function setup(page, records = [row()], options = {}) {
       return json({ code: 'bad_jwt', message: 'JWT expired' }, 401)
     if (url.pathname === '/auth/v1/user')
       return json({
-        id: USER,
+        id: options.user || USER,
         email: 'test@example.invalid',
         aud: 'authenticated',
       })
-    if (url.pathname.includes('/rpc/record_tags')) {
-      const trash = request.postDataJSON().p_trash
+    if (url.pathname.endsWith('/rpc/is_portfolio_author'))
+      return json(actor === store.authorId)
+    if (url.pathname.endsWith('/rpc/public_record_tags')) {
       return json(
         [
           ...new Set(
             store.records
-              .filter((r) => !!r.deleted_at === trash)
+              .filter(
+                (r) =>
+                  r.user_id === store.authorId && r.is_public && !r.deleted_at,
+              )
               .flatMap((r) => r.tags),
           ),
         ]
@@ -138,16 +153,99 @@ async function setup(page, records = [row()], options = {}) {
           .map((tag) => ({ tag })),
       )
     }
-    if (url.pathname.includes('/rpc/mutate_record')) {
+    if (url.pathname.endsWith('/rpc/public_record')) {
+      store.publicRequests.push(request.url())
+      const id = request.postDataJSON().p_record_id
+      return json(
+        store.records
+          .filter(
+            (r) =>
+              r.id === id &&
+              r.user_id === store.authorId &&
+              r.is_public &&
+              !r.deleted_at,
+          )
+          .map((r) => ({
+            id: r.id,
+            title: r.title,
+            tags: r.tags,
+            content: r.content,
+            cover_path: r.cover_path,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+          })),
+      )
+    }
+    if (url.pathname.endsWith('/rpc/public_records')) {
+      store.publicRequests.push(request.url())
       const p = request.postDataJSON()
+      let result = store.records.filter(
+        (r) => r.user_id === store.authorId && r.is_public && !r.deleted_at,
+      )
+      if (p.p_query)
+        result = result.filter((r) =>
+          r.title.toLowerCase().includes(p.p_query.toLowerCase()),
+        )
+      if (p.p_tag) result = result.filter((r) => r.tags.includes(p.p_tag))
+      result.sort(
+        (a, b) =>
+          b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id),
+      )
+      if (p.p_before_created_at)
+        result = result.filter(
+          (r) =>
+            r.created_at < p.p_before_created_at ||
+            (r.created_at === p.p_before_created_at && r.id < p.p_before_id),
+        )
+      return json(
+        result.slice(0, Math.min(p.p_limit || 13, 50)).map((r) => ({
+          id: r.id,
+          title: r.title,
+          tags: r.tags,
+          cover_path: r.cover_path,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+        })),
+      )
+    }
+    if (url.pathname.includes('/rpc/record_tags')) {
+      const trash = request.postDataJSON().p_trash
+      return json(
+        [
+          ...new Set(
+            store.records
+              .filter((r) => r.user_id === actor && !!r.deleted_at === trash)
+              .flatMap((r) => r.tags),
+          ),
+        ]
+          .sort()
+          .map((tag) => ({ tag })),
+      )
+    }
+    if (
+      url.pathname.includes('/rpc/mutate_record') ||
+      url.pathname.includes('/rpc/set_record_visibility')
+    ) {
+      const p = request.postDataJSON()
+      if (url.pathname.includes('/rpc/set_record_visibility')) {
+        if (actor !== store.authorId)
+          return json(
+            { code: '42501', message: '只有网站作者可以设置公开展示。' },
+            403,
+          )
+        p.p_action = p.p_public ? 'publish' : 'unpublish'
+      }
       store.calls.push(p)
       if (store.receipts.has(p.p_request_id))
         return json(store.receipts.get(p.p_request_id))
-      let record = store.records.find((r) => r.id === p.p_record_id)
+      let record = store.records.find(
+        (r) => r.id === p.p_record_id && r.user_id === actor,
+      )
       const old = record?.cover_path || null
       if (p.p_action === 'create') {
         record = row({
           id: p.p_record_id,
+          user_id: actor,
           title: p.p_title,
           tags: p.p_tags,
           content: p.p_content,
@@ -165,7 +263,18 @@ async function setup(page, records = [row()], options = {}) {
             content: p.p_content,
             cover_path: p.p_cover_path,
           })
-        if (p.p_action === 'trash') record.deleted_at = new Date().toISOString()
+        if (p.p_action === 'publish' || p.p_action === 'unpublish') {
+          if (record.deleted_at)
+            return json(
+              { code: 'P0001', message: '回收站中的记录不能设置公开。' },
+              400,
+            )
+          record.is_public = p.p_action === 'publish'
+        }
+        if (p.p_action === 'trash') {
+          record.deleted_at = new Date().toISOString()
+          record.is_public = false
+        }
         if (p.p_action === 'restore') record.deleted_at = null
         if (p.p_action === 'purge') {
           store.records = store.records.filter((r) => r.id !== record.id)
@@ -186,7 +295,12 @@ async function setup(page, records = [row()], options = {}) {
     }
     if (url.pathname === '/rest/v1/records') {
       store.listRequests.push(request.url())
-      let result = store.records.slice()
+      if (!actor)
+        return json(
+          { code: '42501', message: 'permission denied for table records' },
+          403,
+        )
+      let result = store.records.filter((r) => r.user_id === actor)
       const id = url.searchParams.get('id')?.replace('eq.', '')
       if (id) result = result.filter((r) => r.id === id)
       if (url.searchParams.has('cover_path'))
@@ -221,6 +335,26 @@ async function setup(page, records = [row()], options = {}) {
           ? result[0] || null
           : result,
       )
+    }
+    if (
+      url.pathname.includes('/storage/v1/object/record-covers/') &&
+      request.method() === 'GET'
+    ) {
+      const path = decodeURIComponent(url.pathname.split('/record-covers/')[1])
+      const permitted =
+        path.startsWith(actor + '/') ||
+        store.records.some(
+          (r) =>
+            r.user_id === store.authorId &&
+            r.is_public &&
+            !r.deleted_at &&
+            r.cover_path === path,
+        )
+      return route.fulfill({
+        status: permitted && !store.failCover ? 200 : 403,
+        contentType: 'image/png',
+        body: permitted ? COVER_BYTES : 'Forbidden',
+      })
     }
     if (
       url.pathname.includes('/storage/v1/object/sign/') &&
@@ -281,6 +415,7 @@ test('separate record and search pages preserve pagination, filters and mobile s
     row({
       id: `11111111-1111-4111-8111-${String(i + 1).padStart(12, '0')}`,
       title: `日志 ${String(i + 1).padStart(2, '0')}`,
+      is_public: true,
       tags: [i % 2 ? 'CSS' : 'React'],
       created_at: new Date(Date.UTC(2026, 9, 15, 0, 30 - i)).toISOString(),
     }),
@@ -307,7 +442,12 @@ test('separate record and search pages preserve pagination, filters and mobile s
   await page
     .locator('#projects')
     .screenshot({ path: 'test-results/home-scrolling.png' })
-  await page.getByRole('link', { name: '查看全部记录' }).click()
+  await page.getByRole('link', { name: '查看全部练习' }).click()
+  await expect(page).toHaveURL(/view=showcase/)
+  await expect(page.locator('.record-card')).toHaveCount(12)
+  await page.getByRole('button', { name: '加载更多', exact: true }).click()
+  await expect(page.locator('.record-card')).toHaveCount(24)
+  await page.goto('/?view=records')
   await expect(page).toHaveURL(/view=records/)
   await expect(page.locator('.record-card')).toHaveCount(12)
   await page.getByRole('button', { name: '加载更多', exact: true }).click()
@@ -412,7 +552,14 @@ test('independent feature pages require login and never load private records ano
     privateRequests++
     return route.abort()
   })
-  for (const view of ['records', 'search', 'manage', 'trash', 'storage']) {
+  for (const view of [
+    'records',
+    'search',
+    'manage',
+    'trash',
+    'storage',
+    'backup',
+  ]) {
     await page.goto(`/?view=${view}`)
     await expect(
       page.getByRole('link', { name: '登录后查看记录' }),
@@ -442,6 +589,7 @@ test('new record saves text and restores a browser draft after reload', async ({
   await expect(page.getByRole('heading', { name: '草稿测试' })).toBeVisible()
   expect(store.records).toHaveLength(1)
   expect(store.records[0].tags).toEqual(['React', 'CSS'])
+  expect(store.records[0].is_public).toBe(false)
   expect(
     await page.evaluate(() =>
       Object.keys(localStorage).filter((key) =>
@@ -566,7 +714,7 @@ test('list failures report errors and retry instead of pretending there are no r
       body: JSON.stringify({ message: '测试服务暂不可用' }),
     })
   })
-  await page.goto('/')
+  await page.goto('/?view=records')
   await expect(page.getByRole('alert')).toContainText('测试服务暂不可用')
   await expect(page.getByText('还没有记录，写下第一条吧。')).toHaveCount(0)
   fail = false
@@ -581,7 +729,7 @@ test('trash needs confirmation, retains cover, restore works, then purge cleans 
   page,
 }) => {
   const path = `${USER}/old.webp`
-  const store = await setup(page, [row({ cover_path: path })])
+  const store = await setup(page, [row({ cover_path: path, is_public: true })])
   await page.goto(`/?record=${ID}`)
   await page.getByRole('link', { name: '管理记录', exact: false }).click()
   await page.getByRole('button', { name: '移入回收站', exact: true }).click()
@@ -596,6 +744,7 @@ test('trash needs confirmation, retains cover, restore works, then purge cleans 
     .click()
   await expect(page).toHaveURL(/view=records/)
   expect(store.records[0].deleted_at).toBeTruthy()
+  expect(store.records[0].is_public).toBe(false)
   expect(store.deleted).toHaveLength(0)
   await page.getByRole('link', { name: '记录管理', exact: true }).click()
   await page.getByRole('link', { name: '回收站', exact: false }).click()
@@ -606,6 +755,7 @@ test('trash needs confirmation, retains cover, restore works, then purge cleans 
     page.getByRole('button', { name: '移入回收站', exact: true }),
   ).toBeVisible()
   expect(store.records[0].deleted_at).toBeNull()
+  expect(store.records[0].is_public).toBe(false)
   await page.getByRole('button', { name: '移入回收站', exact: true }).click()
   await page
     .getByRole('dialog')
@@ -627,6 +777,7 @@ test('trash needs confirmation, retains cover, restore works, then purge cleans 
 test('homepage downloads the small WOFF2 and never requests the original TTF', async ({
   page,
 }) => {
+  await setup(page, [], { signedOut: true })
   const requests = []
   page.on('request', (request) => requests.push(request.url()))
   const [font] = await Promise.all([
@@ -944,4 +1095,314 @@ test('Markdown preview and saved reading render code, tables and lists without e
   ).toBeVisible()
   expect(store.records[0].content).toBe(markdown)
   expect(await page.evaluate(() => window.markdownExecuted)).toBeUndefined()
+})
+
+test('guests browse published work and covers without private-table or signed-link requests', async ({
+  page,
+}) => {
+  const other = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  const path = `${USER}/public.png`
+  const store = await setup(
+    page,
+    [
+      row({
+        title: '公开的练习',
+        tags: ['公开标签'],
+        content: '## 可以阅读的正文',
+        is_public: true,
+        cover_path: path,
+      }),
+      row({
+        id: '22222222-2222-4222-8222-222222222222',
+        title: '私密标题',
+        tags: ['私密标签'],
+      }),
+      row({
+        id: '33333333-3333-4333-8333-333333333333',
+        title: '回收站标题',
+        is_public: true,
+        deleted_at: '2026-10-15',
+      }),
+      row({
+        id: '44444444-4444-4444-8444-444444444444',
+        title: '其他作者标题',
+        user_id: other,
+        is_public: true,
+      }),
+    ],
+    { signedOut: true },
+  )
+  const requests = []
+  page.on('request', (request) => requests.push(request.url()))
+  await page.goto('/')
+  await expect(page.locator('.record-card')).toHaveCount(1)
+  await expect(page.locator('.record-card')).toContainText('公开的练习')
+  await page.getByRole('link', { name: '查看全部练习', exact: false }).click()
+  await expect(
+    page.getByRole('heading', { name: '练习展示', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByLabel('标签', { exact: true }).locator('option'),
+  ).toHaveText(['全部标签', '公开标签'])
+  await page.locator('.record-card').click()
+  await expect(page).toHaveURL(/\?show=/)
+  await expect(
+    page.getByRole('heading', { name: '可以阅读的正文' }),
+  ).toBeVisible()
+  await expect(page.getByAltText('公开的练习的封面')).toBeVisible()
+  await expect
+    .poll(() =>
+      page.getByAltText('公开的练习的封面').evaluate((img) => img.naturalWidth),
+    )
+    .toBe(1)
+  await expect(page.getByRole('button', { name: '编辑记录' })).toHaveCount(0)
+  await expect(
+    page.getByRole('link', { name: '管理记录', exact: false }),
+  ).toHaveCount(0)
+  expect(store.listRequests).toHaveLength(0)
+  expect(store.calls).toHaveLength(0)
+  expect(requests.some((url) => url.includes('/object/sign/'))).toBe(false)
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true)
+  await page.screenshot({
+    path: 'test-results/public-reading-mobile.png',
+    fullPage: true,
+  })
+  await page.goto(`/?record=${ID}`)
+  await expect(
+    page.getByRole('heading', { name: '可以阅读的正文' }),
+  ).toBeVisible()
+  await page.goto('/?show=22222222-2222-4222-8222-222222222222')
+  await expect(
+    page.getByText('这条练习未公开、已取消公开或不存在。'),
+  ).toBeVisible()
+  await expect(page.getByText('私密标题', { exact: true })).toHaveCount(0)
+})
+
+test('author confirms publishing, shares a public link and can withdraw it', async ({
+  page,
+}) => {
+  const store = await setup(page)
+  await page.goto(`/?record=${ID}&manage=1`)
+  await page.getByRole('button', { name: '公开展示', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('标题、标签、正文和封面')
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  expect(store.calls).toHaveLength(0)
+  await page.getByRole('button', { name: '公开展示', exact: true }).click()
+  await page.getByRole('button', { name: '确认公开', exact: true }).click()
+  await expect(
+    page.getByText('记录已公开，可以复制公开链接分享。'),
+  ).toBeVisible()
+  expect(store.records[0].is_public).toBe(true)
+  expect(store.records[0].version).toBe(2)
+  const url = await page.getByLabel('公开链接', { exact: true }).inputValue()
+  expect(new URL(url).searchParams.get('show')).toBe(ID)
+  expect(new URL(url).searchParams.get('manage')).toBeNull()
+  await page.screenshot({
+    path: 'test-results/publication-settings.png',
+    fullPage: true,
+  })
+  await page.goto(url)
+  await expect(page.locator('.markdown-body')).toContainText('原始正文')
+  await expect(
+    page.getByRole('link', { name: '管理记录', exact: false }),
+  ).toHaveCount(0)
+  await page.goto(`/?edit=${ID}`)
+  await expect(page.getByText('这条记录已公开', { exact: false })).toBeVisible()
+  await page.goto(`/?record=${ID}&manage=1`)
+  await page.getByRole('button', { name: '取消公开', exact: true }).click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: '取消公开', exact: true })
+    .click()
+  await expect(page.getByText('已取消公开，记录仅自己可见。')).toBeVisible()
+  expect(store.records[0].is_public).toBe(false)
+  expect(store.records[0].version).toBe(3)
+  await page.goto(url)
+  await expect(
+    page.getByText('这条练习未公开、已取消公开或不存在。'),
+  ).toBeVisible()
+  expect(store.deleted).toHaveLength(0)
+})
+
+test('lost publication response survives reload and replays the same request once', async ({
+  page,
+}) => {
+  const store = await setup(page, [row()], { loseResponse: true })
+  await page.goto(`/?record=${ID}&manage=1`)
+  await page.getByRole('button', { name: '公开展示', exact: true }).click()
+  await page.getByRole('button', { name: '确认公开', exact: true }).click()
+  await expect(page.getByRole('button', { name: '重试上次操作' })).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: '重试上次操作' }).click()
+  await expect(
+    page.getByText('记录已公开，可以复制公开链接分享。'),
+  ).toBeVisible()
+  expect(store.calls).toHaveLength(2)
+  expect(store.calls[0].p_request_id).toBe(store.calls[1].p_request_id)
+  expect(store.calls[1].p_action).toBe('publish')
+  expect(store.records[0].version).toBe(2)
+  expect(store.records[0].is_public).toBe(true)
+  await expect(page.getByRole('button', { name: '重试上次操作' })).toHaveCount(
+    0,
+  )
+})
+
+test('other accounts can read public links but never see author management or publish their own work', async ({
+  page,
+}) => {
+  const other = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  const otherId = '22222222-2222-4222-8222-222222222222'
+  const store = await setup(
+    page,
+    [
+      row({ is_public: true }),
+      row({ id: otherId, user_id: other, title: '另一账号的私密记录' }),
+    ],
+    { user: other },
+  )
+  await page.goto(`/?record=${ID}`)
+  await expect(page.locator('.public-record-content')).toContainText('原始正文')
+  await expect(
+    page.getByRole('link', { name: '管理记录', exact: false }),
+  ).toHaveCount(0)
+  await page.goto(`/?record=${ID}&manage=1`)
+  await expect(
+    page.getByText('记录不存在，或当前账号没有访问权限。'),
+  ).toBeVisible()
+  await expect(page.getByRole('button')).toHaveCount(0)
+  await page.goto(`/?record=${otherId}&manage=1`)
+  await expect(
+    page.getByText('此账号的记录保持私密。公开展示由网站作者管理。'),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: '公开展示', exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole('link', { name: '编辑记录', exact: true }),
+  ).toBeVisible()
+  expect(store.calls).toHaveLength(0)
+})
+
+test('public filters and return links keep their scope and private tags are excluded', async ({
+  page,
+}) => {
+  await setup(
+    page,
+    [
+      row({ title: 'React 100%_ 练习', tags: ['React'], is_public: true }),
+      row({
+        id: '22222222-2222-4222-8222-222222222222',
+        title: 'React 100abc',
+        tags: ['CSS'],
+        is_public: true,
+      }),
+      row({
+        id: '33333333-3333-4333-8333-333333333333',
+        title: 'React 100%_ 私密',
+        tags: ['私密标签'],
+      }),
+    ],
+    { signedOut: true },
+  )
+  await page.goto('/?view=showcase')
+  await page.getByLabel('搜索标题', { exact: true }).fill('100%_')
+  await page.getByLabel('标签', { exact: true }).selectOption('React')
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect(page.locator('.record-card')).toHaveCount(1)
+  await page.locator('.record-card').click()
+  await page.getByRole('link', { name: '返回练习展示', exact: false }).click()
+  await expect(page).toHaveURL(/view=showcase/)
+  await expect(page.getByLabel('搜索标题', { exact: true })).toHaveValue(
+    '100%_',
+  )
+  await expect(page.getByLabel('标签', { exact: true })).toHaveValue('React')
+  await expect(
+    page.getByRole('option', { name: '私密标签', exact: true }),
+  ).toHaveCount(0)
+})
+
+test('missing publication schema and stale publication changes stay visible and do not break editing', async ({
+  page,
+}) => {
+  const store = await setup(page, [row()])
+  let missing = true
+  await page.route('**/rest/v1/rpc/is_portfolio_author', (route) =>
+    missing
+      ? route.fulfill({
+          status: 404,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            code: 'PGRST202',
+            message: 'Missing function',
+          }),
+        })
+      : route.fallback(),
+  )
+  await page.goto(`/?record=${ID}&manage=1`)
+  await expect(page.getByRole('alert')).toContainText('云端功能尚未更新')
+  await expect(
+    page.getByRole('link', { name: '编辑记录', exact: true }),
+  ).toBeVisible()
+  missing = false
+  await page.getByRole('button', { name: '重试公开设置' }).click()
+  await page.getByRole('button', { name: '公开展示', exact: true }).click()
+  store.records[0].version = 2 // Another device changes the record after this page reads it.
+  await page.getByRole('button', { name: '确认公开', exact: true }).click()
+  await expect(
+    page.getByText('记录已在其他页面或设备修改，请重新读取记录后再操作。'),
+  ).toBeVisible()
+  expect(store.records[0].is_public).toBe(false)
+  await expect(page.getByRole('button', { name: '重试上次操作' })).toHaveCount(
+    0,
+  )
+  await page.getByRole('button', { name: '重新读取记录', exact: true }).click()
+  await page.getByRole('button', { name: '公开展示', exact: true }).click()
+  await page.getByRole('button', { name: '确认公开', exact: true }).click()
+  await expect(
+    page.getByText('记录已公开，可以复制公开链接分享。'),
+  ).toBeVisible()
+  expect(store.records[0].version).toBe(3)
+})
+
+test('public reading and cover failures can retry without exposing a partial private record', async ({
+  page,
+}) => {
+  const store = await setup(
+    page,
+    [row({ is_public: true, cover_path: `${USER}/cover.png` })],
+    { signedOut: true },
+  )
+  let fail = true
+  store.failCover = true
+  await page.route('**/rest/v1/rpc/public_record', (route) =>
+    fail
+      ? route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: '公开读取暂不可用' }),
+        })
+      : route.fallback(),
+  )
+  await page.goto(`/?show=${ID}`)
+  await expect(page.getByRole('alert')).toContainText('公开读取暂不可用')
+  fail = false
+  await page.getByRole('button', { name: '重试读取', exact: true }).click()
+  await expect(page.locator('.markdown-body')).toContainText('原始正文')
+  await expect(
+    page.getByRole('button', { name: '重试封面', exact: true }),
+  ).toBeVisible()
+  store.failCover = false
+  await page.getByRole('button', { name: '重试封面', exact: true }).click()
+  await expect(page.getByAltText('原始记录的封面')).toBeVisible()
+  store.records[0].is_public = false
+  await page.reload()
+  await expect(
+    page.getByText('这条练习未公开、已取消公开或不存在。'),
+  ).toBeVisible()
+  await expect(page.locator('.record-cover')).toHaveCount(0)
 })

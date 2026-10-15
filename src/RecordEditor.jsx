@@ -474,6 +474,11 @@ function EditorForm({ user, record, draft, back }) {
       </a>
       <div className="record-editor">
         <h1>{record ? '编辑记录' : '新增记录'}</h1>
+        <p className="helper">
+          {record?.is_public
+            ? '这条记录已公开，保存的修改也会更新公开内容。'
+            : '记录默认仅自己可见。保存后可在记录管理页选择公开展示。'}
+        </p>
         {candidate && (
           <aside className="notice">
             <p>

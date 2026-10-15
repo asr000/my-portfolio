@@ -53,3 +53,23 @@ test('invalid and external return targets fall back to a record-list page', () =
   }
   assert.equal(listReturn(null, 'trash'), '/?view=trash')
 })
+
+test('public shares preserve public search filters and contain no management action', () => {
+  const back = '/?view=showcase&q=100%25&tag=React&manage=1'
+  const target = new URL(
+    recordLink('a/b', { back, publicView: true, manage: true }),
+    'https://portfolio.invalid',
+  )
+  assert.equal(target.searchParams.get('show'), 'a/b')
+  assert.equal(target.searchParams.get('record'), null)
+  assert.equal(target.searchParams.get('manage'), null)
+  assert.equal(
+    target.searchParams.get('back'),
+    '/?view=showcase&q=100%25&tag=React',
+  )
+  const fallback = new URL(
+    recordLink('id', { publicView: true, back: 'https://example.com/' }),
+    'https://portfolio.invalid',
+  )
+  assert.equal(fallback.searchParams.get('back'), '/?view=showcase')
+})

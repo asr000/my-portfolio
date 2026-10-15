@@ -23,6 +23,18 @@ export async function getRecord(id) {
 }
 
 export async function mutateRecord(request) {
+  if (['publish', 'unpublish'].includes(request.action)) {
+    const { data, error } = await supabase
+      .rpc('set_record_visibility', {
+        p_request_id: request.requestId,
+        p_record_id: request.recordId,
+        p_version: request.version,
+        p_public: request.action === 'publish',
+      })
+      .retry(false)
+    if (error) throw error
+    return data
+  }
   const { data, error } = await supabase
     .rpc('mutate_record', {
       p_request_id: request.requestId,
@@ -37,6 +49,14 @@ export async function mutateRecord(request) {
     .retry(false)
   if (error) throw error
   return data
+}
+
+export async function getPublicRecord(id) {
+  const { data, error } = await supabase
+    .rpc('public_record', { p_record_id: id })
+    .retry(false)
+  if (error) throw error
+  return data[0] || null
 }
 
 export function queueCleanup(userId, path) {

@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { useAuth } from './lib/authContext.js'
 import { AuthNotice } from './AuthAccess.jsx'
+import { loginLink } from './lib/navigation.js'
 
 export default function RecordsLayout({
   title,
@@ -8,7 +9,9 @@ export default function RecordsLayout({
   back = '/?view=records',
   backLabel = '返回记录列表',
   children,
+  publicPage = false,
 }) {
+  const auth = useAuth()
   const params = new URLSearchParams(window.location.search)
   const notice = params.get('notice')
   return (
@@ -17,10 +20,23 @@ export default function RecordsLayout({
         <a className="record-back" href={back}>
           ← {backLabel}
         </a>
-        {params.get('view') !== 'account' && (
-          <a className="text-link" href="/?view=account">
-            我的账号
+        {publicPage ? (
+          <a
+            className="text-link"
+            href={
+              auth.user
+                ? '/?view=records'
+                : loginLink(window.location.pathname + window.location.search)
+            }
+          >
+            {auth.user ? '我的记录' : '作者登录'}
           </a>
+        ) : (
+          params.get('view') !== 'account' && (
+            <a className="text-link" href="/?view=account">
+              我的账号
+            </a>
+          )
         )}
       </div>
       <div className="records-page-content">
