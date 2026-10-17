@@ -1,4 +1,5 @@
 import { useNoteAccess } from './lib/useNoteAccess.js'
+import PageTopbar from './PageTopbar.jsx'
 
 export function NoteAccessMessage({ access }) {
   if (access.loading) return <p role="status">正在检查笔记权限…</p>
@@ -29,9 +30,7 @@ export default function NoteWriteAccess({ children }) {
   if (!access.data?.can_write)
     return (
       <main className="record-page">
-        <a className="record-back" href="/?view=records">
-          ← 返回我的记录
-        </a>
+        <PageTopbar back="/?view=records" backLabel="返回我的记录" />
         <NoteAccessMessage access={access} />
       </main>
     )

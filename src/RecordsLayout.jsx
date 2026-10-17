@@ -2,6 +2,7 @@ import { Fragment } from 'react'
 import { useAuth } from './lib/authContext.js'
 import { AuthNotice } from './AuthAccess.jsx'
 import { loginLink } from './lib/navigation.js'
+import PageTopbar from './PageTopbar.jsx'
 
 export default function RecordsLayout({
   title,
@@ -16,10 +17,7 @@ export default function RecordsLayout({
   const notice = params.get('notice')
   return (
     <main className="record-page">
-      <div className="page-topbar">
-        <a className="record-back" href={back}>
-          ← {backLabel}
-        </a>
+      <PageTopbar back={back} backLabel={backLabel}>
         {publicPage ? (
           <a
             className="text-link"
@@ -38,7 +36,7 @@ export default function RecordsLayout({
             </a>
           )
         )}
-      </div>
+      </PageTopbar>
       <div className="records-page-content">
         <header className="records-page-heading">
           <p className="page-eyebrow">Re:代码生活 / 项目记录</p>

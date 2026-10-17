@@ -13,6 +13,7 @@ import ConfirmDialog from './ConfirmDialog.jsx'
 import { listReturn, loginLink, recordLink } from './lib/navigation.js'
 import { supabase } from './lib/supabaseClient.js'
 import PublicRecord from './PublicRecord.jsx'
+import PageTopbar from './PageTopbar.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
@@ -168,9 +169,10 @@ export default function RecordDetail({ recordId, manage = false }) {
   if (status === 'public') return <PublicRecord recordId={recordId} />
   return (
     <main className="record-page">
-      <a className="record-back" href={manage && record ? detailHref : back}>
-        ← {manage && record ? '返回记录详情' : '返回记录列表'}
-      </a>
+      <PageTopbar
+        back={manage && record ? detailHref : back}
+        backLabel={manage && record ? '返回记录详情' : '返回记录列表'}
+      />
       {notice && (
         <p className="notice" role="status">
           {notice}

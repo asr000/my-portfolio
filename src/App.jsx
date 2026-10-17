@@ -16,6 +16,7 @@ import { HERO_TITLE, HERO_NOTE, HERO_LINK_LABEL } from './lib/heroText.js'
 import Account from './Account.jsx'
 import PublicRecord from './PublicRecord.jsx'
 import NoteWriteAccess from './NoteAccess.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 
 const DataBackup = lazy(() => import('./DataBackup.jsx'))
 const MarkdownHelp = lazy(() => import('./MarkdownHelp.jsx'))
@@ -38,6 +39,7 @@ function Header() {
         <a href={auth.user ? '/?view=account' : loginLink('/')}>
           {auth.status === 'loading' ? '账号' : auth.user ? '我的账号' : '登录'}
         </a>
+        <ThemeToggle />
       </nav>
     </header>
   )

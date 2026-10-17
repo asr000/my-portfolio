@@ -22,6 +22,7 @@ import {
 } from './lib/recordUtils.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
 import { listReturn, loginLink, recordLink } from './lib/navigation.js'
+import PageTopbar from './PageTopbar.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
@@ -65,9 +66,7 @@ export default function RecordEditor({ recordId }) {
   if (!loaded)
     return (
       <main className="record-page">
-        <a className="record-back" href={back}>
-          ← 返回
-        </a>
+        <PageTopbar back={back} backLabel="返回" />
         {error ? (
           <>
             <p role="alert">{error}</p>
@@ -88,6 +87,7 @@ export default function RecordEditor({ recordId }) {
   if (loaded.signedOut)
     return (
       <main className="record-page">
+        <PageTopbar back={back} backLabel="返回" />
         <h1>请先登录</h1>
         <a
           className="record-create-link"
@@ -95,7 +95,6 @@ export default function RecordEditor({ recordId }) {
         >
           去登录
         </a>
-        <a href={back}>返回</a>
       </main>
     )
   return (
@@ -448,10 +447,10 @@ function EditorForm({ user, record, draft, back }) {
   }
   return (
     <main className="record-page">
-      <a
-        className="record-back"
-        href={back}
-        onClick={(e) => {
+      <PageTopbar
+        back={back}
+        backLabel={`返回${record ? '记录管理' : '记录列表'}`}
+        onBack={(e) => {
           if (!dirty || saved) return
           if (
             !window.confirm(
@@ -469,9 +468,7 @@ function EditorForm({ user, record, draft, back }) {
             setMessage('草稿保存失败，请先复制重要内容。')
           }
         }}
-      >
-        ← 返回{record ? '记录管理' : '记录列表'}
-      </a>
+      />
       <div className="record-editor">
         <h1>{record ? '编辑记录' : '新增记录'}</h1>
         <p className="helper">

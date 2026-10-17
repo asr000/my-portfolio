@@ -31,6 +31,10 @@ const invitationMetadata = (item) => ({
   redeemed_at: item.redeemed_at,
 })
 
+async function expectNoHorizontalOverflow(page) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+}
+
 async function setup(page, records = [row()], options = {}) {
   const store = {
     records,
@@ -569,6 +573,110 @@ async function setup(page, records = [row()], options = {}) {
   return store
 }
 
+test('light and dark appearance persist across navigation, refresh and other tabs', async ({ page, context }) => {
+  await setup(page, [row({ is_public: true })], { signedOut: true })
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      window.appearanceAtFirstContent = document.documentElement.dataset.theme
+    }, { once: true })
+  })
+  await page.goto('/')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(page.getByRole('button', { name: '切换为深色模式' })).toBeVisible()
+  await page.screenshot({ path: 'test-results/theme-light-home.png', fullPage: true })
+  await page.getByRole('button', { name: '切换为深色模式' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  expect(await page.evaluate(() => localStorage.getItem('portfolio:theme'))).toBe('dark')
+  await page.screenshot({ path: 'test-results/theme-dark-home.png', fullPage: true })
+  await page.goto('/?view=showcase')
+  await expect(page.getByRole('button', { name: '切换为亮色模式' })).toBeVisible()
+  expect(await page.evaluate(() => window.appearanceAtFirstContent)).toBe('dark')
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  const other = await context.newPage()
+  await setup(other, [row({ is_public: true })], { signedOut: true })
+  await other.goto('/?login=1')
+  await other.getByLabel('邮箱', { exact: true }).fill('retain@example.invalid')
+  await page.getByRole('button', { name: '切换为亮色模式' }).click()
+  await expect(other.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(other.getByLabel('邮箱', { exact: true })).toHaveValue('retain@example.invalid')
+  await page.goto('/?view=register')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await other.close()
+})
+
+test('switching appearance preserves editor text and changes lazy-loaded code highlighting', async ({ page }) => {
+  const store = await setup(page)
+  await page.goto(`/?edit=${ID}`)
+  await page.getByLabel('标题', { exact: true }).fill('切换后保留的标题')
+  await page.getByLabel('详细内容', { exact: true }).fill('## 记录\n\n```js\nconst name = "hello"\n```')
+  await page.getByRole('button', { name: '切换为深色模式' }).click()
+  await expect(page.getByLabel('标题', { exact: true })).toHaveValue('切换后保留的标题')
+  await expect(page.getByLabel('详细内容', { exact: true })).toHaveValue('## 记录\n\n```js\nconst name = "hello"\n```')
+  await page.getByRole('button', { name: '预览', exact: true }).click()
+  await expect(page.locator('.hljs-keyword')).toBeVisible()
+  const darkKeyword = await page.locator('.hljs-keyword').evaluate((element) => getComputedStyle(element).color)
+  await page.getByRole('button', { name: '切换为亮色模式' }).click()
+  const lightKeyword = await page.locator('.hljs-keyword').evaluate((element) => getComputedStyle(element).color)
+  expect(lightKeyword).not.toBe(darkKeyword)
+  await page.screenshot({ path: 'test-results/theme-light-editor.png', fullPage: true })
+  await page.getByRole('button', { name: '写作', exact: true }).click()
+  await expect(page.getByLabel('详细内容', { exact: true })).toHaveValue('## 记录\n\n```js\nconst name = "hello"\n```')
+  expect(store.calls).toHaveLength(0)
+})
+
+test('warm light colors cover mobile lists, account pages and confirmation dialogs', async ({ page }) => {
+  await setup(page, [row({ is_public: true })])
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const url of ['/?view=showcase', '/?view=account', '/?view=invitations', `/?show=${ID}`]) {
+    await page.goto(url)
+    await expect(page.getByRole('button', { name: '切换为深色模式' })).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+  }
+  await page.goto('/?view=showcase')
+  await expect(page.locator('.record-card')).toHaveCount(1)
+  await page.screenshot({ path: 'test-results/theme-light-list-mobile.png', fullPage: true })
+  await page.goto('/?view=account')
+  await expect(page.getByLabel('公开昵称')).toBeVisible()
+  await page.screenshot({ path: 'test-results/theme-light-account-mobile.png', fullPage: true })
+  await page.goto(`/?record=${ID}&manage=1`)
+  await page.getByRole('button', { name: '取消公开', exact: true }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  const dialogLight = await page.getByRole('dialog').evaluate((element) => getComputedStyle(element).backgroundColor)
+  await page.screenshot({ path: 'test-results/theme-light-dialog-mobile.png', fullPage: true })
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await page.getByRole('button', { name: '切换为深色模式' }).click()
+  await page.getByRole('button', { name: '取消公开', exact: true }).click()
+  const dialogDark = await page.getByRole('dialog').evaluate((element) => getComputedStyle(element).backgroundColor)
+  expect(dialogLight).not.toBe(dialogDark)
+})
+
+test('appearance switching still works when browser storage is unavailable', async ({ page }) => {
+  await setup(page, [], { signedOut: true })
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem
+    const set = Storage.prototype.setItem
+    Storage.prototype.getItem = function (key) {
+      if (key === 'portfolio:theme') throw new Error('Storage unavailable')
+      return get.call(this, key)
+    }
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'portfolio:theme') throw new Error('Storage unavailable')
+      return set.call(this, key, value)
+    }
+  })
+  await page.goto('/?login=1')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await page.getByRole('button', { name: '切换为深色模式' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.getByRole('button', { name: '切换为亮色模式' }).click()
+  await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible()
+  await page.setViewportSize({ width: 320, height: 740 })
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: 'test-results/theme-light-login-mobile.png', fullPage: true })
+})
+
 test('separate record and search pages preserve pagination, filters and mobile square covers', async ({
   page,
 }) => {
@@ -686,14 +794,14 @@ test('management hub links to independent trash and cover-cleanup pages', async 
   await expect(
     page.getByRole('heading', { name: '记录管理', exact: true }),
   ).toBeVisible()
-  await expect(page.getByRole('button')).toHaveCount(0)
+  await expect(page.locator('button:not(.theme-toggle)')).toHaveCount(0)
   await page.getByRole('link', { name: '回收站', exact: false }).click()
   await expect(page).toHaveURL(/view=trash/)
   await expect(page.getByText('回收站是空的。', { exact: true })).toBeVisible()
   await page.getByRole('link', { name: '返回记录管理', exact: false }).click()
   await page.getByRole('link', { name: '封面清理', exact: false }).click()
   await expect(page).toHaveURL(/view=storage/)
-  await expect(page.getByRole('button')).toHaveCount(1)
+  await expect(page.locator('button:not(.theme-toggle)')).toHaveCount(1)
   await page.screenshot({
     path: 'test-results/cover-cleanup.png',
     fullPage: true,
@@ -726,7 +834,7 @@ test('independent feature pages require login and never load private records ano
       page.getByRole('link', { name: '登录后查看记录' }),
     ).toBeVisible()
     await expect(page.locator('.record-card')).toHaveCount(0)
-    await expect(page.getByRole('button')).toHaveCount(0)
+    await expect(page.locator('button:not(.theme-toggle)')).toHaveCount(0)
   }
   expect(privateRequests).toBe(0)
 })
@@ -1435,7 +1543,7 @@ test('invited accounts publish their own notes while other accounts remain isola
   await expect(
     page.getByText('记录不存在，或当前账号没有访问权限。'),
   ).toBeVisible()
-  await expect(page.getByRole('button')).toHaveCount(0)
+  await expect(page.locator('button:not(.theme-toggle)')).toHaveCount(0)
   await page.goto(`/?record=${otherId}&manage=1`)
   await expect(
     page.getByRole('button', { name: '公开展示', exact: true }),

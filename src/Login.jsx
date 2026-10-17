@@ -3,6 +3,7 @@ import { supabase } from './lib/supabaseClient.js'
 import { useAuth } from './lib/authContext.js'
 import { safeDestination } from './lib/navigation.js'
 import { authErrorText } from './lib/accountUtils.js'
+import PageTopbar from './PageTopbar.jsx'
 
 function Login() {
   const auth = useAuth()
@@ -47,9 +48,7 @@ function Login() {
 
   return (
     <main className="record-page">
-      <a className="record-back" href={next}>
-        ← 返回项目记录
-      </a>
+      <PageTopbar back={next} backLabel="返回项目记录" />
 
       <div className="record-editor">
         <h1>登录</h1>

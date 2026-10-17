@@ -1,0 +1,174 @@
+/* Cream, soft rose and butter yellow. A saved dark preference keeps the original palette. */
+:root {
+  color-scheme: light;
+  --page-bg: #fbf7ef;
+  --text: #554a42;
+  --text-strong: #493c35;
+  --text-muted: #7a6a5e;
+  --text-soft: #78675b;
+  --text-secondary: #716157;
+  --surface-input: #fffdf8;
+  --surface-panel: #fff9ed;
+  --surface-hover: #faeadd;
+  --card-bg: #fff3df;
+  --tag-bg: #f8e0e3;
+  --accent: #925063;
+  --link: #8f4d60;
+  --link-hover: #713d4c;
+  --nav-hover: #713d4c;
+  --border: #deccb8;
+  --control-border: #a28b77;
+  --badge-border: #c3a58a;
+  --divider: #e8d9c9;
+  --button-bg: #efd0d5;
+  --button-hover: #e8bbc3;
+  --button-text: #593c44;
+  --placeholder: #806d5e;
+  --focus: #995267;
+  --danger-border: #c3938d;
+  --danger-bg: #f9e2dc;
+  --danger-text: #8b3a36;
+  --selection-bg: #f5dfa1;
+  --selection-text: #5a4034;
+  --quote-bg: #f8edcf;
+  --inline-code-bg: #f1e7d7;
+  --code-bg: #f6f0e6;
+  --warning-text: #87602a;
+  --modal-backdrop: #4c3b2c66;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page-bg: #1e3a52;
+  --text: #d8e5ed;
+  --text-strong: #fdeeee;
+  --text-muted: #9ca3af;
+  --text-soft: #b8c8d4;
+  --text-secondary: #d2e0e9;
+  --surface-input: #1f2b37;
+  --surface-panel: #243f56;
+  --surface-hover: #2c4a63;
+  --card-bg: #44638c;
+  --tag-bg: #1f2b37;
+  --accent: #94bac3;
+  --link: #afd3db;
+  --link-hover: #f1f7f8;
+  --nav-hover: #495687;
+  --border: #49677f;
+  --control-border: #68859b;
+  --badge-border: #6e8ba0;
+  --divider: #dcc8cd;
+  --button-bg: #36546f;
+  --button-hover: #456982;
+  --button-text: #e7f6ff;
+  --placeholder: #a8b5c2;
+  --focus: #b9dfb9;
+  --danger-border: #bd8185;
+  --danger-bg: #633c4a;
+  --danger-text: #ffe9e9;
+  --selection-bg: #94bac3;
+  --selection-text: #162b3b;
+  --quote-bg: #22394d;
+  --inline-code-bg: #142738;
+  --code-bg: #0d1117;
+  --warning-text: #efd29d;
+  --modal-backdrop: #06121bcc;
+}
+
+html,
+body {
+  background: var(--page-bg);
+  color: var(--text);
+}
+html {
+  scrollbar-color: var(--control-border) var(--page-bg);
+  accent-color: var(--accent);
+}
+a {
+  color: var(--link);
+}
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+.site-header nav {
+  align-items: center;
+}
+.page-topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.page-topbar > .record-back {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 7px 11px;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--surface-input);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.theme-toggle:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.theme-toggle svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* The lazy-loaded highlight.js dark sheet stays intact; these scoped rules adapt its syntax roles. */
+[data-theme='light'] .hljs {
+  color: #4f443d;
+  background: transparent;
+}
+[data-theme='light'] .hljs :is(.hljs-doctag, .hljs-keyword, .hljs-template-tag, .hljs-template-variable, .hljs-type, .hljs-variable.language_) {
+  color: #9c4057;
+}
+[data-theme='light'] .hljs :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
+  color: #795088;
+}
+[data-theme='light'] .hljs :is(.hljs-attr, .hljs-attribute, .hljs-literal, .hljs-meta, .hljs-number, .hljs-operator, .hljs-variable, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id) {
+  color: #7450a0;
+}
+[data-theme='light'] .hljs :is(.hljs-regexp, .hljs-string, .hljs-meta .hljs-string) {
+  color: #416349;
+}
+[data-theme='light'] .hljs :is(.hljs-built_in, .hljs-symbol) {
+  color: #94551f;
+}
+[data-theme='light'] .hljs :is(.hljs-comment, .hljs-code, .hljs-formula) {
+  color: #786a5e;
+}
+[data-theme='light'] .hljs :is(.hljs-name, .hljs-quote, .hljs-selector-tag, .hljs-selector-pseudo) {
+  color: #416349;
+}
+[data-theme='light'] .hljs :is(.hljs-subst, .hljs-emphasis, .hljs-strong) {
+  color: #4f443d;
+}
+[data-theme='light'] .hljs .hljs-section {
+  color: #8f4d60;
+}
+[data-theme='light'] .hljs .hljs-bullet {
+  color: #806125;
+}
+[data-theme='light'] .hljs .hljs-addition {
+  color: #3e643e;
+  background: #dfeada;
+}
+[data-theme='light'] .hljs .hljs-deletion {
+  color: #8b3b4a;
+  background: #f6dddf;
+}

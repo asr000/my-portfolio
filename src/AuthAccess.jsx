@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { useAuth } from './lib/authContext.js'
 import { loginLink } from './lib/navigation.js'
+import PageTopbar from './PageTopbar.jsx'
 
 export function AuthNotice({ label = '登录后查看记录' }) {
   const auth = useAuth()
@@ -35,9 +36,7 @@ export function RequireAccount({ children }) {
     return <Fragment key={auth.user.id}>{children}</Fragment>
   return (
     <main className="record-page">
-      <a className="record-back" href="/?view=records">
-        ← 返回记录列表
-      </a>
+      <PageTopbar back="/?view=records" backLabel="返回记录列表" />
       {auth.status === 'signed-out' && <h1>请先登录</h1>}
       <AuthNotice label="请先登录" />
     </main>
