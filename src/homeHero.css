@@ -1,0 +1,52 @@
+.hero.home-hero {
+  gap: 24px;
+  width: min(1240px, 100%);
+  min-height: 560px;
+  margin: 0 auto;
+  padding: 32px 48px;
+  font-family: inherit;
+}
+.hero-title-side { display: flex; align-items: center; align-self: flex-end; gap: 18px; }
+.hero-title-side .hero-title { writing-mode: vertical-rl; font-size: 38px; }
+.hero-fortune-trigger { writing-mode: vertical-rl; font-family: 'Portfolio Hero', 'Microsoft YaHei', sans-serif; font-size: inherit; font-weight: 400; line-height: 1.35; letter-spacing: .07em; padding: 12px 6px; border: 0; border-radius: 12px; background: transparent; color: var(--text-strong); cursor: pointer; transition: background-color .2s; }
+.hero-fortune-trigger:hover { background: var(--surface-hover); }
+.hero-fortune-trigger:focus-visible { outline: 2px solid var(--focus); outline-offset: 5px; }
+.hero-fortune-trigger:disabled { cursor: wait; }
+.hero-day-count { text-combine-upright: all; font-variant-numeric: tabular-nums; }
+.hero-secret-hint { writing-mode: vertical-rl; color: var(--text-muted); font-size: 12px; letter-spacing: .2em; }
+.hero-bottom { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.hero-progress { font-size: 14px; margin: 0; }
+.hero-retry { color: var(--link); border: 0; background: transparent; text-decoration: underline; cursor: pointer; font-size: inherit; padding: 4px 8px; }
+.hero-day-rule { color: var(--text-muted); font-size: 12px; }
+.fortune-eyebrow { color: var(--accent); font-size: 13px; letter-spacing: .12em; }
+.fortune-dialog { position: fixed; max-width: 450px; width: calc(100% - 32px); max-height: calc(100dvh - 40px); overflow: auto; padding: 36px 28px 24px; background: var(--surface-panel); color: var(--text); border: 1px solid var(--border); border-radius: 22px; text-align: center; }
+.fortune-dialog::backdrop { background: var(--modal-backdrop); backdrop-filter: blur(3px); }
+.fortune-dialog h2 { font-size: 26px; margin: 10px 0; }
+.fortune-close { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; background: transparent; color: var(--text); border: 0; border-radius: 50%; font-size: 26px; cursor: pointer; }
+.fortune-close:hover { background: var(--surface-hover); }
+.fortune-date, .fortune-count { color: var(--text-secondary); font-size: 13px; }
+.fortune-paper { padding: 28px 24px 24px; border: 1px solid var(--border); border-radius: 60px 60px 8px 8px; background: var(--card-bg); margin: 24px 0; }
+.fortune-number { color: var(--accent); font-size: 12px; letter-spacing: .18em; }
+.fortune-paper h3 { font-size: 38px; font-weight: 500; letter-spacing: .28em; text-indent: .28em; color: var(--accent); margin: 14px 0 20px; }
+.fortune-paper p { font-size: 16px; line-height: 1.9; color: var(--text); }
+.fortune-task { border-top: 1px dashed var(--border); margin-top: 20px; padding-top: 18px; }
+.fortune-task span { font-size: 12px; color: var(--accent); }
+.fortune-task p { font-size: 14px; margin: 8px 0 0; }
+.fortune-footnote, .fortune-rule { font-size: 12px; color: var(--text-muted); line-height: 1.8; }
+.fortune-rule { border-top: 1px solid var(--divider); padding-top: 16px; margin: 22px 0 0; }
+.fortune-message { padding: 18px 0; }
+.fortune-message p, .fortune-loading { font-size: 15px; }
+.fortune-message .hero-link { border: 1px solid var(--border); cursor: pointer; }
+@media (max-width: 850px) {
+  .hero.home-hero { padding: 32px 20px; }
+  .hero-title-side { gap: 6px; }
+  .hero-title-side .hero-title { font-size: 32px; }
+}
+@media (max-width: 480px) {
+  .hero.home-hero { padding: 24px 12px; gap: 20px; }
+  .hero-title-side .hero-title { font-size: 25px; }
+  .hero-secret-hint { display: none; }
+  .hero-day-rule { max-width: 250px; }
+  .fortune-eyebrow { font-size: 11px; }
+  .fortune-dialog { padding: 32px 20px 20px; }
+}

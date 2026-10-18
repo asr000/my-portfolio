@@ -14,16 +14,8 @@ export const FORTUNES = [
   { title: '常青', text: '不用每天都惊艳，持续的小步也会走得很远。', task: '给明天的自己留下一个具体的小目标。' },
 ]
 
-export function plantStage(count) {
-  return count >= 6 ? 'flower' : count >= 3 ? 'leaf' : 'sprout'
-}
-
-export function gardenError(error) {
+export function fortuneError(error) {
   return ['PGRST202', '42883'].includes(error?.code)
-    ? '花园正在准备中，稍后再来看看。'
-    : '暂时没能连上花园，请稍后重试。'
-}
-
-export function publicTagLink(tag) {
-  return `/?${new URLSearchParams({ view: 'showcase', ...(tag && { tag }) })}`
+    ? '签到功能正在准备中，稍后再来看看。'
+    : '暂时无法读取数据，请稍后重试。'
 }

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
-import { FORTUNES, plantStage, publicTagLink } from '../src/lib/garden.js'
+import { FORTUNES } from '../src/lib/dailyFortune.js'
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
@@ -12,13 +12,10 @@ const migrations = await Promise.all([
   '20261015_records_workflow.sql', '20261016_public_showcase.sql',
   '20261017_invitation_auth.sql', '20261018_member_publication.sql',
   '20261019_learning_garden.sql',
+  '20261020_remove_learning_garden.sql',
 ].map((name) => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8')))
 
-test('plant stages and tag links handle milestones and literal special characters', () => {
-  assert.deepEqual([1, 2, 3, 5, 6, 100].map(plantStage), ['sprout', 'sprout', 'leaf', 'leaf', 'flower', 'flower'])
-  const url = new URL(publicTagLink('C++ & React/#'), 'https://test.invalid')
-  assert.equal(url.searchParams.get('tag'), 'C++ & React/#')
-  assert.equal(url.searchParams.get('view'), 'showcase')
+test('daily fortune pool preserves the twelve stored draw indexes', () => {
   assert.equal(FORTUNES.length, 12)
   assert.equal(new Set(FORTUNES.map((f) => f.title)).size, 12)
 })
@@ -161,6 +158,18 @@ test('garden counts, first publications and daily draws enforce real database bo
       await login(B)
       assert.equal((await progress()).publish_days, 1)
       assert.equal((await draw()).checkin_days, 2)
+    })
+    await t.test('removing the garden endpoint preserves publications and daily draws and is repeatable', async () => {
+      const before = await progress()
+      await db.exec('reset role')
+      await db.exec(migrations[5])
+      await db.exec(migrations[5])
+      await login(B)
+      await assert.rejects(rpc('public_learning_garden()'), /does not exist/)
+      assert.deepEqual(await progress(), before)
+      assert.deepEqual(await draw(), before)
+      await login('', 'anon')
+      assert.equal((await progress()).publish_days, 3)
     })
   } finally { await db.close() }
 })
