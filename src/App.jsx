@@ -172,14 +172,14 @@ function Pages() {
 
         <section id="about">
           <h2>关于我</h2>
-          <p>这里以后会介绍我的学习经历和正在练习的技术。</p>
+          <p>好像还没啥可说的。</p>
         </section>
 
         <Projects />
 
         <section id="contact">
           <h2>联系我</h2>
-          <p>这里以后会放邮箱或其他联系方式。</p>
+          <p>QQ群:902722762</p>
         </section>
       </main>
     </div>
