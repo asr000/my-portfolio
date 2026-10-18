@@ -12,7 +12,7 @@ import AuthProvider from './AuthProvider.jsx'
 import { RequireAccount } from './AuthAccess.jsx'
 import { useAuth } from './lib/authContext.js'
 import { loginLink } from './lib/navigation.js'
-import { HERO_TITLE, HERO_NOTE, HERO_LINK_LABEL } from './lib/heroText.js'
+import HomeHero from './HomeHero.jsx'
 import Account from './Account.jsx'
 import PublicRecord from './PublicRecord.jsx'
 import NoteWriteAccess from './NoteAccess.jsx'
@@ -168,19 +168,7 @@ function Pages() {
       <Header />
 
       <main>
-        <section className="hero">
-          <h1 className="hero-title">
-            {HERO_TITLE.split('0')[0]}
-            <span className="highlight-char">0</span>
-            {HERO_TITLE.split('0')[1]}
-          </h1>
-
-          <p>{HERO_NOTE}</p>
-
-          <a className="hero-link" href="/?view=showcase">
-            {HERO_LINK_LABEL}
-          </a>
-        </section>
+        <HomeHero />
 
         <section id="about">
           <h2>关于我</h2>

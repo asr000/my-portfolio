@@ -55,6 +55,11 @@ async function setup(page, records = [row()], options = {}) {
     passwordUpdates: 0,
     loseInvitationResponse: !!options.loseInvitationResponse,
     profiles: new Map(),
+    gardenDay: '2026-10-18',
+    publicationDays: new Map(Object.entries(options.publicationDays || { [USER]: ['2026-10-17'] }).map(([id, days]) => [id, new Set(days)])),
+    firstPublications: new Set(records.filter((r) => r.is_public).map((r) => r.id)),
+    checkins: options.checkins || new Map(),
+    drawRequests: 0,
   }
   await page.addInitScript(
     ({ user, signedOut, verified }) => {
@@ -209,6 +214,28 @@ async function setup(page, records = [row()], options = {}) {
       author_name: store.profiles.get(id) || (id === store.authorId ? '网站作者' : '笔记作者-0123456789'),
       author_role: id === store.authorId ? 'owner' : 'member',
     })
+    const gardenProgress = () => ({
+      scope: actor ? 'self' : 'owner', day: store.gardenDay,
+      publish_days: store.publicationDays.get(actor || store.authorId)?.size || 0,
+      published_today: store.publicationDays.get(actor || store.authorId)?.has(store.gardenDay) || false,
+      fortune_index: actor ? store.checkins.get(`${actor}:${store.gardenDay}`) ?? null : null,
+      checkin_days: actor ? [...store.checkins.keys()].filter((key) => key.startsWith(actor + ':')).length : 0,
+      can_check_in: !!actor && store.emailVerified,
+    })
+    if (url.pathname.endsWith('/rpc/note_garden_progress')) return json(gardenProgress())
+    if (url.pathname.endsWith('/rpc/draw_daily_note_fortune')) {
+      store.drawRequests++
+      if (!actor || !store.emailVerified) return json({ code: '42501', message: '请先登录并验证邮箱。' }, 403)
+      const key = `${actor}:${store.gardenDay}`
+      if (!store.checkins.has(key)) store.checkins.set(key, 3)
+      return json(gardenProgress())
+    }
+    if (url.pathname.endsWith('/rpc/public_learning_garden')) {
+      const visible = store.records.filter(publicRecord)
+      const tags = new Map()
+      for (const r of visible) for (const tag of new Set(r.tags)) tags.set(tag, (tags.get(tag) || 0) + 1)
+      return json({ total: visible.length, plants: [...tags].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag)).slice(0, 4) })
+    }
     if (url.pathname.endsWith('/rpc/can_write_notes')) return json(!!canWrite)
     if (url.pathname.endsWith('/rpc/note_profile') ||
       url.pathname.endsWith('/rpc/set_note_display_name')) {
@@ -437,6 +464,11 @@ async function setup(page, records = [row()], options = {}) {
               400,
             )
           record.is_public = p.p_action === 'publish'
+          if (record.is_public && !store.firstPublications.has(record.id)) {
+            store.firstPublications.add(record.id)
+            if (!store.publicationDays.has(actor)) store.publicationDays.set(actor, new Set())
+            store.publicationDays.get(actor).add(store.gardenDay)
+          }
         }
         if (p.p_action === 'trash') {
           record.deleted_at = new Date().toISOString()
@@ -572,6 +604,146 @@ async function setup(page, records = [row()], options = {}) {
   page.on('dialog', (dialog) => dialog.accept())
   return store
 }
+
+test('learning garden grows from public tags, links to filtered notes and fits phones in both themes', async ({ page }) => {
+  const notes = Array.from({ length: 11 }, (_, i) => row({
+    id: `11111111-1111-4111-8111-${String(i + 1).padStart(12, '0')}`,
+    title: `花园练习 ${i + 1}`, is_public: true,
+    tags: [i < 6 ? 'React' : i < 9 ? 'Python' : i === 9 ? 'C++ & 算法' : '游戏开发'],
+  }))
+  await setup(page, [...notes, row({ tags: ['私密标签'], is_public: false })], { signedOut: true })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await expect(page.getByText('站长已在 1 个日子里发布练习')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'React，6 篇公开笔记', exact: true })).toBeVisible()
+  await expect(page.locator('.garden-bed')).not.toContainText('私密标签')
+  await expect(page.getByRole('link', { name: 'React，6 篇公开笔记', exact: true }).locator('.plant-flower')).toHaveCount(1)
+  await expect(page.getByRole('link', { name: 'Python，3 篇公开笔记', exact: true }).locator('.plant-bud')).toHaveCount(1)
+  expect(await page.locator('.plant-growth').first().evaluate((el) => getComputedStyle(el).animationName)).toBe('none')
+  await page.screenshot({ path: 'test-results/garden-light-desktop.png', fullPage: true })
+  await page.getByRole('button', { name: '切换为深色模式' }).click()
+  await page.screenshot({ path: 'test-results/garden-dark-desktop.png', fullPage: true })
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 })
+    await expectNoHorizontalOverflow(page)
+    await expect(page.locator('.hero-fortune-trigger')).toBeVisible()
+  }
+  await page.getByRole('button', { name: '切换为亮色模式' }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.screenshot({ path: 'test-results/garden-light-mobile.png', fullPage: true })
+  await page.getByRole('link', { name: 'C++ & 算法，1 篇公开笔记', exact: true }).click()
+  expect(new URL(page.url()).searchParams.get('tag')).toBe('C++ & 算法')
+  await expect(page.locator('.record-card')).toHaveCount(1)
+})
+
+test('title opens a login invitation for guests and never records an anonymous check-in', async ({ page }) => {
+  const store = await setup(page, [], { signedOut: true })
+  await page.goto('/')
+  await expect(page.locator('.hero-day-count')).toHaveText('1')
+  await page.locator('.hero-fortune-trigger').focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('link', { name: '登录后抽签' })).toHaveAttribute('href', '/?login=1&next=%2F')
+  expect(store.drawRequests).toBe(0)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('.hero-fortune-trigger')).toBeFocused()
+})
+
+test('daily draw survives reload, retries, cross-device sessions and the next day without increasing publication count', async ({ page, browser }) => {
+  const store = await setup(page)
+  await page.goto('/')
+  await expect(page.locator('.hero-day-count')).toHaveText('1')
+  await page.locator('.hero-fortune-trigger').click()
+  await expect(page.getByRole('dialog')).toContainText('2026-10-18 · 今日已签到')
+  await expect(page.getByRole('dialog')).toContainText('已经相遇 1 天 · 发布练习 1 天')
+  const fortune = await page.locator('.fortune-paper').textContent()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: 'test-results/garden-fortune-mobile.png', fullPage: true })
+  await page.getByRole('button', { name: '关闭今日签' }).click()
+  await page.reload()
+  await page.locator('.hero-fortune-trigger').click()
+  await expect(page.locator('.fortune-paper')).toHaveText(fortune)
+  expect(store.checkins.size).toBe(1)
+  const device = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  try {
+    const phone = await device.newPage()
+    await setup(phone, [], { checkins: store.checkins })
+    await phone.goto('http://127.0.0.1:4179/')
+    await phone.locator('.hero-fortune-trigger').click()
+    await expect(phone.locator('.fortune-paper')).toHaveText(fortune)
+    await expect(phone.getByRole('dialog')).toContainText('已经相遇 1 天')
+  } finally { await device.close() }
+  store.gardenDay = '2026-10-19'
+  await page.getByRole('button', { name: '关闭今日签' }).click()
+  await page.locator('.hero-fortune-trigger').click()
+  await expect(page.getByRole('dialog')).toContainText('2026-10-19 · 今日已签到')
+  await expect(page.getByRole('dialog')).toContainText('已经相遇 2 天 · 发布练习 1 天')
+  expect(store.checkins.size).toBe(2)
+})
+
+test('publishing a new note updates personal title count and garden on return', async ({ page }) => {
+  await setup(page)
+  await page.goto(`/?record=${ID}&manage=1`)
+  await page.getByRole('button', { name: '公开展示', exact: true }).click()
+  await page.getByRole('button', { name: '确认公开', exact: true }).click()
+  await expect(page.getByRole('button', { name: '取消公开', exact: true })).toBeVisible()
+  await page.goto('/')
+  await expect(page.locator('.hero-day-count')).toHaveText('2')
+  await expect(page.locator('.garden-progress')).toContainText('今天也种下了新种子')
+  await expect(page.getByRole('link', { name: 'React，1 篇公开笔记', exact: true })).toBeVisible()
+  await page.locator('.hero-fortune-trigger').click()
+  await expect(page.getByRole('dialog')).toContainText('发布练习 2 天')
+})
+
+test('garden and fortune failure states are retryable without inventing counts or losing a saved draw', async ({ page }) => {
+  const store = await setup(page)
+  await page.route('**/rpc/note_garden_progress', (route) => route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'PGRST202' }) }))
+  await page.route('**/rpc/public_learning_garden', (route) => route.abort('failed'))
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: '重试日历' })).toBeVisible()
+  await expect(page.locator('.hero-day-count')).toHaveText('…')
+  await expect(page.getByRole('button', { name: '重试花园' })).toBeVisible()
+  await page.unroute('**/rpc/note_garden_progress')
+  await page.unroute('**/rpc/public_learning_garden')
+  await page.getByRole('button', { name: '重试日历' }).click()
+  await page.getByRole('button', { name: '重试花园' }).click()
+  await expect(page.locator('.hero-day-count')).toHaveText('1')
+  // Simulate the server committing a check-in, but its response being lost.
+  await page.route('**/rpc/draw_daily_note_fortune', (route) => {
+    store.checkins.set(`${USER}:${store.gardenDay}`, 7)
+    return route.abort('failed')
+  })
+  await page.locator('.hero-fortune-trigger').click()
+  await expect(page.getByRole('button', { name: '重试抽签' })).toBeVisible()
+  await page.unroute('**/rpc/draw_daily_note_fortune')
+  await page.getByRole('button', { name: '重试抽签' }).click()
+  await expect(page.getByRole('dialog')).toContainText('雨后')
+  await expect(page.getByRole('dialog')).toContainText('已经相遇 1 天')
+  expect(store.checkins.size).toBe(1)
+})
+
+test('unverified readers see verification and account changes discard the previous private daily draw', async ({ page, context }) => {
+  const store = await setup(page, [], { emailVerified: false })
+  await page.goto('/')
+  await page.locator('.hero-fortune-trigger').click()
+  await expect(page.getByRole('link', { name: '去验证邮箱' })).toBeVisible()
+  expect(store.drawRequests).toBe(0)
+  await page.getByRole('button', { name: '关闭今日签' }).click()
+  store.emailVerified = true
+  await page.reload()
+  await page.locator('.hero-fortune-trigger').click()
+  await expect(page.locator('.fortune-paper')).toBeVisible()
+  const other = await context.newPage()
+  await setup(other)
+  await other.goto('/?view=account')
+  await other.getByRole('button', { name: '退出登录', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.bringToFront()
+  await expect(page.locator('.garden-progress')).toContainText('站长已在')
+  await other.close()
+})
 
 test('light and dark appearance persist across navigation, refresh and other tabs', async ({ page, context }) => {
   await setup(page, [row({ is_public: true })], { signedOut: true })
