@@ -55,7 +55,6 @@ function FortuneDialog({ auth, onClose, onProgress }) {
                 <p className="fortune-count">已经相遇 {result.checkin_days} 天 · 发布练习 {result.publish_days} 天</p>
                 <p className="fortune-footnote">今天再来，还是这支签。小小鼓励，愿你写得开心。</p>
               </>}
-      <p className="fortune-rule">每天首次公开一篇新笔记，标题数字 +1；同一天多篇只计 1 天。签到单独记录。</p>
     </dialog>
   )
 }
@@ -109,7 +108,6 @@ function HeroContent({ auth }) {
           {message && <button className="hero-retry" onClick={() => setAttempt((n) => n + 1)}>重试日历</button>}
         </p>
         <a className="hero-link" href="/?view=showcase">{HERO_LINK_LABEL}</a>
-        <span className="hero-day-rule">每天首次公开新笔记 +1 · 以 UTC+8 的自然日计算</span>
       </div>
       {open && <FortuneDialog auth={auth} onClose={() => setOpen(false)} onProgress={setProgress} />}
     </section>

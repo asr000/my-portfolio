@@ -17,7 +17,6 @@
 .hero-bottom { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .hero-progress { font-size: 14px; margin: 0; }
 .hero-retry { color: var(--link); border: 0; background: transparent; text-decoration: underline; cursor: pointer; font-size: inherit; padding: 4px 8px; }
-.hero-day-rule { color: var(--text-muted); font-size: 12px; }
 .fortune-eyebrow { color: var(--accent); font-size: 13px; letter-spacing: .12em; }
 .fortune-dialog { position: fixed; max-width: 450px; width: calc(100% - 32px); max-height: calc(100dvh - 40px); overflow: auto; padding: 36px 28px 24px; background: var(--surface-panel); color: var(--text); border: 1px solid var(--border); border-radius: 22px; text-align: center; }
 .fortune-dialog::backdrop { background: var(--modal-backdrop); backdrop-filter: blur(3px); }
@@ -32,8 +31,7 @@
 .fortune-task { border-top: 1px dashed var(--border); margin-top: 20px; padding-top: 18px; }
 .fortune-task span { font-size: 12px; color: var(--accent); }
 .fortune-task p { font-size: 14px; margin: 8px 0 0; }
-.fortune-footnote, .fortune-rule { font-size: 12px; color: var(--text-muted); line-height: 1.8; }
-.fortune-rule { border-top: 1px solid var(--divider); padding-top: 16px; margin: 22px 0 0; }
+.fortune-footnote { font-size: 12px; color: var(--text-muted); line-height: 1.8; }
 .fortune-message { padding: 18px 0; }
 .fortune-message p, .fortune-loading { font-size: 15px; }
 .fortune-message .hero-link { border: 1px solid var(--border); cursor: pointer; }
@@ -46,7 +44,6 @@
   .hero.home-hero { padding: 24px 12px; gap: 20px; }
   .hero-title-side .hero-title { font-size: 25px; }
   .hero-secret-hint { display: none; }
-  .hero-day-rule { max-width: 250px; }
   .fortune-eyebrow { font-size: 11px; }
   .fortune-dialog { padding: 32px 20px 20px; }
 }
