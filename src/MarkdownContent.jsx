@@ -1,5 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import javascript from 'highlight.js/lib/languages/javascript'
 import typescript from 'highlight.js/lib/languages/typescript'
@@ -12,8 +14,11 @@ import json from 'highlight.js/lib/languages/json'
 import bash from 'highlight.js/lib/languages/bash'
 import sql from 'highlight.js/lib/languages/sql'
 import 'highlight.js/styles/github-dark.css'
+import 'katex/dist/katex.min.css'
 
-const highlight = [
+const rehypePlugins = [
+  // Render math before highlighting code; untrusted notes cannot inject HTML or URLs.
+  [rehypeKatex, { trust: false, strict: 'ignore', maxSize: 20, maxExpand: 1000 }],
   [
     rehypeHighlight,
     {
@@ -56,8 +61,8 @@ export default function MarkdownContent({ content }) {
     <div className="markdown-body">
       <ReactMarkdown
         skipHtml
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={highlight}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={rehypePlugins}
         components={components}
       >
         {content}

@@ -51,7 +51,16 @@ function FortuneDialog({ auth, onClose, onProgress }) {
             : !fortune ? <p className="fortune-loading" role="status">正在为今天抽一支签…</p>
               : <>
                 <p className="fortune-date">{result.day} · 今日已签到</p>
-                <div className="fortune-paper"><span className="fortune-number">第 {String(result.fortune_index + 1).padStart(2, '0')} 签</span><h3>{fortune.title}</h3><p>{fortune.text}</p><div className="fortune-task"><span>今日小事</span><p>{fortune.task}</p></div></div>
+                <div className="fortune-paper">
+                  <span className="fortune-number">第 {String(result.fortune_index + 1).padStart(2, '0')} 签</span>
+                  <h3>{fortune.title}</h3>
+                  <div className="fortune-luck" data-luck={fortune.luck} aria-label={`今日运势：${fortune.luck}`}>
+                    <span>今日运势</span><strong>{fortune.luck}</strong>
+                  </div>
+                  <p className="fortune-outlook">{fortune.outlook}</p>
+                  <p>{fortune.text}</p>
+                  <div className="fortune-task"><span>今日小事</span><p>{fortune.task}</p></div>
+                </div>
                 <p className="fortune-count">已经相遇 {result.checkin_days} 天 · 发布练习 {result.publish_days} 天</p>
                 <p className="fortune-footnote">今天再来，还是这支签。小小鼓励，愿你写得开心。</p>
               </>}

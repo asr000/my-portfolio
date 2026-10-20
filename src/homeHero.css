@@ -28,6 +28,11 @@
 .fortune-number { color: var(--accent); font-size: 12px; letter-spacing: .18em; }
 .fortune-paper h3 { font-size: 38px; font-weight: 500; letter-spacing: .28em; text-indent: .28em; color: var(--accent); margin: 14px 0 20px; }
 .fortune-paper p { font-size: 16px; line-height: 1.9; color: var(--text); }
+.fortune-luck { display: inline-flex; align-items: center; gap: 12px; padding: 8px 18px; border: 1px solid var(--badge-border); border-radius: 999px; background: var(--quote-bg); color: var(--accent); }
+.fortune-luck span { font-size: 12px; letter-spacing: .08em; }
+.fortune-luck strong { font-size: 22px; font-weight: 500; letter-spacing: .12em; }
+.fortune-luck[data-luck='凶'], .fortune-luck[data-luck='大凶'] { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+.fortune-paper .fortune-outlook { font-size: 14px; color: var(--text-secondary); margin: 14px 0 20px; }
 .fortune-task { border-top: 1px dashed var(--border); margin-top: 20px; padding-top: 18px; }
 .fortune-task span { font-size: 12px; color: var(--accent); }
 .fortune-task p { font-size: 14px; margin: 8px 0 0; }

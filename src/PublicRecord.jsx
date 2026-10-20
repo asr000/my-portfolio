@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { getPublicRecord } from './lib/recordsApi.js'
 import { errorText, formatDate } from './lib/recordUtils.js'
 import { listReturn, loginLink } from './lib/navigation.js'
-import { useCover } from './lib/useCover.js'
 import RecordsLayout from './RecordsLayout.jsx'
 import RecordSource from './RecordSource.jsx'
 
@@ -13,7 +12,6 @@ export default function PublicRecord({ recordId }) {
   const [status, setStatus] = useState('loading')
   const [message, setMessage] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const cover = useCover(record?.cover_path, { publicAccess: true })
   const back = listReturn(
     new URLSearchParams(window.location.search).get('back'),
     'showcase',
@@ -82,20 +80,6 @@ export default function PublicRecord({ recordId }) {
               </a>
             ))}
           </div>
-          {cover.loading && <p role="status">正在读取封面…</p>}
-          {cover.error && (
-            <p role="status">
-              封面暂不可用。<button onClick={cover.retry}>重试封面</button>
-            </p>
-          )}
-          {cover.url && !cover.error && (
-            <img
-              className="record-cover"
-              src={cover.url}
-              alt={`${record.title}的封面`}
-              onError={cover.fail}
-            />
-          )}
           <div className="public-record-content">
             <Suspense fallback={<p role="status">正在排版正文…</p>}>
               <MarkdownContent content={record.content} />

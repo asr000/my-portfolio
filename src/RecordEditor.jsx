@@ -536,9 +536,13 @@ function EditorForm({ user, record, draft, back }) {
               写作说明 ↗
             </a>
           </div>
+          <small id="record-content-help">
+            支持 Markdown 和数学公式：行内用 <code>$x^2$</code>，独立公式用两个单独成行的 <code>$$</code> 包围。切换到预览查看效果。
+          </small>
           <textarea
             id="record-content"
             name="content"
+            aria-describedby="record-content-help"
             rows={10}
             maxLength={100000}
             disabled={disabled}

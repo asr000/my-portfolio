@@ -8,7 +8,6 @@ import {
 } from './lib/recordsApi.js'
 import { readLocal, removeLocal, writeLocal } from './lib/localData.js'
 import { errorText, formatDate } from './lib/recordUtils.js'
-import { useCover } from './lib/useCover.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import { listReturn, loginLink, recordLink } from './lib/navigation.js'
 import { supabase } from './lib/supabaseClient.js'
@@ -32,7 +31,6 @@ export default function RecordDetail({ recordId, manage = false }) {
   const [copyMessage, setCopyMessage] = useState('')
   const [needsReload, setNeedsReload] = useState(false)
   const locked = useRef(false)
-  const cover = useCover(manage ? null : record?.cover_path)
   const params = new URLSearchParams(window.location.search)
   const back = listReturn(
     params.get('back'),
@@ -372,20 +370,6 @@ export default function RecordDetail({ recordId, manage = false }) {
                   </a>
                 ))}
               </div>
-              {cover.loading && <p role="status">正在读取封面…</p>}
-              {cover.error && (
-                <p role="status">
-                  封面加载失败。<button onClick={cover.retry}>重试封面</button>
-                </p>
-              )}
-              {cover.url && !cover.error && (
-                <img
-                  className="record-cover"
-                  src={cover.url}
-                  alt={`${record.title}的封面`}
-                  onError={cover.fail}
-                />
-              )}
               <Suspense fallback={<p role="status">正在排版正文…</p>}>
                 <MarkdownContent content={record.content} />
               </Suspense>

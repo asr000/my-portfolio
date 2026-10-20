@@ -16,8 +16,14 @@ const migrations = await Promise.all([
 ].map((name) => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8')))
 
 test('daily fortune pool preserves the twelve stored draw indexes', () => {
-  assert.equal(FORTUNES.length, 12)
-  assert.equal(new Set(FORTUNES.map((f) => f.title)).size, 12)
+  assert.deepEqual(FORTUNES.map((f) => f.title), [
+    '破土', '向阳', '生根', '新芽', '晴日', '微风',
+    '花信', '雨后', '留白', '枝叶', '结伴', '常青',
+  ])
+  assert.deepEqual(new Set(FORTUNES.map((f) => f.luck)), new Set(['大吉', '中吉', '小吉', '平', '末吉', '凶', '大凶']))
+  for (const fortune of FORTUNES) {
+    assert.ok(fortune.outlook.trim().length > 0)
+  }
 })
 
 test('garden counts, first publications and daily draws enforce real database boundaries', async (t) => {

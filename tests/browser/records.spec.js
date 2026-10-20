@@ -646,10 +646,19 @@ test('daily draw survives reload, retries, cross-device sessions and the next da
   await page.locator('.hero-fortune-trigger').click()
   await expect(page.getByRole('dialog')).toContainText('2026-10-18 · 今日已签到')
   await expect(page.getByRole('dialog')).toContainText('已经相遇 1 天 · 发布练习 1 天')
+  await expect(page.locator('.fortune-luck')).toContainText('今日运势')
+  await expect(page.locator('.fortune-luck strong')).toHaveText(/^(大吉|中吉|小吉|平|末吉|凶|大凶)$/)
+  await expect(page.locator('.fortune-outlook')).not.toBeEmpty()
   const fortune = await page.locator('.fortune-paper').textContent()
   await page.setViewportSize({ width: 390, height: 844 })
   await expectNoHorizontalOverflow(page)
   await page.screenshot({ path: 'test-results/daily-fortune-mobile.png', fullPage: true })
+  await page.getByRole('button', { name: '关闭今日签' }).click()
+  await page.getByRole('button', { name: '切换为深色模式' }).click()
+  await page.locator('.hero-fortune-trigger').click()
+  await expect(page.locator('.fortune-paper')).toHaveText(fortune)
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: 'test-results/daily-fortune-mobile-dark.png', fullPage: true })
   await page.getByRole('button', { name: '关闭今日签' }).click()
   await page.reload()
   await page.locator('.hero-fortune-trigger').click()
@@ -671,6 +680,31 @@ test('daily draw survives reload, retries, cross-device sessions and the next da
   await expect(page.getByRole('dialog')).toContainText('已经相遇 2 天 · 发布练习 1 天')
   expect(store.checkins.size).toBe(2)
 })
+
+for (const [index, luck] of [[7, '凶'], [8, '大凶']]) {
+  test(`existing daily fortune ${luck} displays its outlook and stays fixed after reload`, async ({ page }) => {
+    const store = await setup(page, [], { checkins: new Map([[`${USER}:2026-10-18`, index]]) })
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/')
+    await page.locator('.hero-fortune-trigger').click()
+    await expect(page.locator('.fortune-luck strong')).toHaveText(luck)
+    await expect(page.locator('.fortune-outlook')).toContainText('宜')
+    await expect(page.locator('.fortune-outlook')).toContainText('忌')
+    await expect(page.locator('.fortune-task')).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+    await page.screenshot({ path: `test-results/daily-fortune-${index}-light.png`, fullPage: true })
+    const fortune = await page.locator('.fortune-paper').textContent()
+    await page.getByRole('button', { name: '关闭今日签' }).click()
+    await page.getByRole('button', { name: '切换为深色模式' }).click()
+    await page.reload()
+    await page.locator('.hero-fortune-trigger').click()
+    await expect(page.locator('.fortune-paper')).toHaveText(fortune)
+    await expect(page.locator('.fortune-luck')).toHaveCSS('color', 'rgb(255, 233, 233)')
+    await expectNoHorizontalOverflow(page)
+    await page.screenshot({ path: `test-results/daily-fortune-${index}-dark.png`, fullPage: true })
+    expect(store.checkins.size).toBe(1)
+  })
+}
 
 test('publishing a new note updates personal title count on return', async ({ page }) => {
   await setup(page)
@@ -1124,6 +1158,8 @@ test('cover selection is compressed, replacement saves a new path and cleans old
   expect(store.records[0].cover_path).toMatch(new RegExp(`^${USER}/.*\\.webp$`))
   expect(store.uploaded).toContain(store.records[0].cover_path)
   expect(store.deleted).toContain(oldPath)
+  await expect(page.locator('.markdown-body')).toContainText('原始正文')
+  await expect(page.locator('.record-article img')).toHaveCount(0)
 })
 
 test('list failures report errors and retry instead of pretending there are no records', async ({
@@ -1522,6 +1558,149 @@ test('Markdown preview and saved reading render code, tables and lists without e
   expect(await page.evaluate(() => window.markdownExecuted)).toBeUndefined()
 })
 
+const mathNote = String.raw`## 数学笔记
+
+勾股定理：$a^2 + b^2 = c^2$。
+
+$$
+\int_0^1 x^2\,dx = \frac{1}{3}, \qquad \sqrt{\sum_{i=1}^{n} x_i^2}
+$$
+
+$$
+\begin{aligned}
+(a+b)^2 &= a^2 + 2ab + b^2 \\
+(a-b)^2 &= a^2 - 2ab + b^2
+\end{aligned}
+$$
+
+$$
+A = \begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}
+$$
+
+$$
+|x| = \begin{cases} x, & x \ge 0 \\ -x, & x < 0 \end{cases}
+$$`
+
+test('math survives preview, draft recovery, saving and editing without changing Markdown source', async ({
+  page,
+}) => {
+  const store = await setup(page, [])
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  const content = mathNote + '\n\n' + [
+    '代码中的公式：`$x^2$`',
+    '',
+    '```python',
+    'print("$x^2$")',
+    '```',
+    '',
+    String.raw`美元价格：\$5 和 \$10。`,
+  ].join('\n')
+  await page.goto('/?new=1')
+  await page.getByLabel('标题', { exact: true }).fill('数学笔记测试')
+  await page.getByLabel('详细内容', { exact: true }).fill(content)
+  await page.getByRole('button', { name: '预览', exact: true }).click()
+  await expect(page.locator('.markdown-body .katex')).toHaveCount(5)
+  await expect(page.locator('.markdown-body .katex-display')).toHaveCount(4)
+  await expect(page.locator('.markdown-body .katex-error')).toHaveCount(0)
+  await expect(page.locator('.markdown-body code .katex')).toHaveCount(0)
+  await expect(page.locator('.markdown-body pre')).toContainText('print("$x^2$")')
+  await expect(page.locator('.markdown-body')).toContainText('美元价格：$5 和 $10。')
+  await page.evaluate(() => document.fonts.ready)
+  expect(await page.evaluate(() => document.fonts.check('16px KaTeX_Main'))).toBe(true)
+  await page.locator('.markdown-preview').screenshot({ path: 'test-results/math-editor-preview.png' })
+  await expect(page.getByText('文字草稿已保存在此浏览器。尚未上传的图片需重新选择。')).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: '恢复草稿', exact: true }).click()
+  await expect(page.getByLabel('详细内容', { exact: true })).toHaveValue(content)
+  await page.getByRole('button', { name: '保存记录', exact: true }).click()
+  await expect(page).toHaveURL(/\?record=/)
+  await expect(page.locator('.markdown-body .katex')).toHaveCount(5)
+  expect(store.records[0].content).toBe(content)
+  await page.goto(`/?edit=${store.records[0].id}`)
+  await expect(page.getByLabel('详细内容', { exact: true })).toHaveValue(content)
+  expect(errors).toEqual([])
+})
+
+test('math errors and unsafe commands do not break the note or execute HTML', async ({
+  page,
+}) => {
+  const content = String.raw`$$
+\frac{1}{
+$$
+
+$\href{javascript:alert(1)}{click}$
+
+$\includegraphics{https://example.invalid/track.png}$
+
+$\htmlStyle{background:url(https://example.invalid/track.png)}{x}$
+
+$$
+\def\loop{\loop}\loop
+$$
+
+后面的正文和正确公式仍可阅读：$x+1$。`
+  await setup(page, [row({ content, is_public: true })], { signedOut: true })
+  const errors = []
+  const external = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  page.on('request', (request) => {
+    if (request.url().includes('example.invalid')) external.push(request.url())
+  })
+  await page.goto(`/?show=${ID}`)
+  await expect(page.locator('.markdown-body .katex-error')).toHaveCount(2)
+  await expect(page.locator('.markdown-body')).toContainText('后面的正文和正确公式仍可阅读')
+  await expect(page.locator('.markdown-body annotation').last()).toHaveText('x+1')
+  await expect(page.locator('.markdown-body a, .markdown-body img, .markdown-body script')).toHaveCount(0)
+  await expect(page.locator('.markdown-body [style*="example.invalid"]')).toHaveCount(0)
+  expect(errors).toEqual([])
+  expect(external).toEqual([])
+})
+
+test('public math uses local fonts and scrolls long formulas on mobile in both themes', async ({
+  page,
+}) => {
+  const longFormula = Array.from({ length: 35 }, (_, i) => `x_{${i + 1}}^2`).join(' + ')
+  const content = mathNote + `\n\n$$\n${longFormula}\n$$`
+  await setup(page, [row({ content, is_public: true })], { signedOut: true })
+  const fontResponses = []
+  page.on('response', (response) => {
+    if (response.request().resourceType() === 'font' && response.url().includes('KaTeX'))
+      fontResponses.push({ url: response.url(), status: response.status() })
+  })
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto(`/?show=${ID}`)
+  await expect(page.locator('.markdown-body .katex')).toHaveCount(6)
+  await page.evaluate(() => document.fonts.ready)
+  expect(fontResponses.length).toBeGreaterThan(0)
+  expect(fontResponses.every(({ url, status }) => new URL(url).origin === 'http://127.0.0.1:4179' && status === 200)).toBe(true)
+  const longBlock = page.locator('.katex-display').last()
+  expect(await longBlock.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true)
+  await longBlock.evaluate((node) => { node.scrollLeft = 200 })
+  expect(await longBlock.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0)
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: 'test-results/math-public-mobile-light.png', fullPage: true })
+  await page.getByRole('button', { name: '切换为深色模式', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect(page.locator('.markdown-body .katex')).toHaveCount(6)
+  await expectNoHorizontalOverflow(page)
+  expect(await page.locator('.katex').first().evaluate((node) => getComputedStyle(node).color)).toBe('rgb(216, 229, 237)')
+  await page.screenshot({ path: 'test-results/math-public-mobile-dark.png', fullPage: true })
+})
+
+test('math writing help provides working examples without requiring an account', async ({
+  page,
+}) => {
+  await setup(page, [], { signedOut: true })
+  await page.goto('/?view=markdown-help')
+  await expect(page.getByRole('heading', { name: '数学公式', exact: true })).toBeVisible()
+  await expect(page.locator('.math-example .katex')).toHaveCount(5)
+  await expect(page.locator('.math-example .katex-error')).toHaveCount(0)
+  await expect(page.locator('.markdown-help pre code').filter({ hasText: '\\begin{bmatrix}' })).toHaveCount(1)
+  await page.setViewportSize({ width: 375, height: 812 })
+  await expectNoHorizontalOverflow(page)
+})
+
 test('guests browse published work and covers without private-table or signed-link requests', async ({
   page,
 }) => {
@@ -1569,17 +1748,14 @@ test('guests browse published work and covers without private-table or signed-li
   await expect(
     page.getByLabel('标签', { exact: true }).locator('option'),
   ).toHaveText(['全部标签', '公开标签'])
+  await expect(page.locator('.record-thumbnail img')).toBeVisible()
+  await expect.poll(() => page.locator('.record-thumbnail img').evaluate((img) => img.naturalWidth)).toBe(1)
   await page.locator('.record-card').click()
   await expect(page).toHaveURL(/\?show=/)
   await expect(
     page.getByRole('heading', { name: '可以阅读的正文' }),
   ).toBeVisible()
-  await expect(page.getByAltText('公开的练习的封面')).toBeVisible()
-  await expect
-    .poll(() =>
-      page.getByAltText('公开的练习的封面').evaluate((img) => img.naturalWidth),
-    )
-    .toBe(1)
+  await expect(page.locator('.record-article img')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '编辑记录' })).toHaveCount(0)
   await expect(
     page.getByRole('link', { name: '管理记录', exact: false }),
@@ -1748,6 +1924,8 @@ test('public notes from multiple invited authors show their source and covers on
   await expect(page.locator('.record-card')).toHaveCount(2)
   const memberCard = page.locator('.record-card').filter({ hasText: '朋友的公开笔记' })
   await expect(memberCard.locator('.record-source')).toContainText('学习记录'.repeat(7))
+  await expect(memberCard.locator('.record-thumbnail img')).toBeVisible()
+  await expect.poll(() => memberCard.locator('.record-thumbnail img').evaluate((img) => img.naturalWidth)).toBe(1)
   await expect(page.getByLabel('标签', { exact: true }).locator('option')).toHaveText([
     '全部标签', 'React', '成员标签',
   ])
@@ -1756,8 +1934,7 @@ test('public notes from multiple invited authors show their source and covers on
   await memberCard.click()
   await expect(page.locator('.public-record-source')).toContainText('受邀作者')
   await expect(page.locator('.public-record-source')).not.toContainText('@')
-  await expect(page.getByAltText('朋友的公开笔记的封面')).toBeVisible()
-  await expect.poll(() => page.getByAltText('朋友的公开笔记的封面').evaluate((img) => img.naturalWidth)).toBe(1)
+  await expect(page.locator('.record-article img')).toHaveCount(0)
   await expect(page.getByRole('link', { name: '管理记录', exact: false })).toHaveCount(0)
   expect(requests.some((url) => url.includes('/object/sign/'))).toBe(false)
   expect(store.listRequests).toHaveLength(0)
@@ -1907,7 +2084,7 @@ test('missing publication schema and stale publication changes stay visible and 
   expect(store.records[0].version).toBe(3)
 })
 
-test('public reading and cover failures can retry without exposing a partial private record', async ({
+test('public reading retries without loading a cover or exposing a partial private record', async ({
   page,
 }) => {
   const store = await setup(
@@ -1917,6 +2094,10 @@ test('public reading and cover failures can retry without exposing a partial pri
   )
   let fail = true
   store.failCover = true
+  const storageRequests = []
+  page.on('request', (request) => {
+    if (request.url().includes('/storage/v1/')) storageRequests.push(request.url())
+  })
   await page.route('**/rest/v1/rpc/public_record', (route) =>
     fail
       ? route.fulfill({
@@ -1931,18 +2112,14 @@ test('public reading and cover failures can retry without exposing a partial pri
   fail = false
   await page.getByRole('button', { name: '重试读取', exact: true }).click()
   await expect(page.locator('.markdown-body')).toContainText('原始正文')
-  await expect(
-    page.getByRole('button', { name: '重试封面', exact: true }),
-  ).toBeVisible()
-  store.failCover = false
-  await page.getByRole('button', { name: '重试封面', exact: true }).click()
-  await expect(page.getByAltText('原始记录的封面')).toBeVisible()
+  await expect(page.locator('.record-article img')).toHaveCount(0)
+  expect(storageRequests).toEqual([])
   store.records[0].is_public = false
   await page.reload()
   await expect(
     page.getByText('这条练习未公开、已取消公开或不存在。'),
   ).toBeVisible()
-  await expect(page.locator('.record-cover')).toHaveCount(0)
+  await expect(page.locator('.record-article')).toHaveCount(0)
 })
 
 function emailCallback(type, user = USER) {
