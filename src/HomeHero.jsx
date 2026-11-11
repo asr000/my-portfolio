@@ -1,16 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from './lib/authContext.js'
-import { supabase } from './lib/supabaseClient.js'
+import { apiGet, apiPost } from './lib/apiClient.js'
 import { HERO_TITLE, HERO_LINK_LABEL } from './lib/heroText.js'
 import { FORTUNES, fortuneError } from './lib/dailyFortune.js'
 import { loginLink } from './lib/navigation.js'
 import './homeHero.css'
-
-async function fortuneRpc(name) {
-  const { data, error } = await supabase.rpc(name).retry(false)
-  if (error) throw error
-  return data
-}
 
 function FortuneDialog({ auth, onClose, onProgress }) {
   const dialog = useRef(null)
@@ -26,7 +20,7 @@ function FortuneDialog({ auth, onClose, onProgress }) {
   useEffect(() => {
     if (!verified) return
     let active = true
-    fortuneRpc('draw_daily_note_fortune').then((data) => {
+    apiPost('/api/fortune', {}).then((data) => {
       if (active) { setResult(data); setMessage(''); onProgress(data) }
     }).catch((error) => {
       if (active) setMessage(fortuneError(error))
@@ -80,7 +74,7 @@ function HeroContent({ auth }) {
     const refresh = () => {
       if (document.visibilityState === 'hidden') return
       const current = ++request
-      fortuneRpc('note_garden_progress').then((data) => {
+      apiGet('/api/progress').then((data) => {
         if (active && current === request) { setProgress(data); setMessage('') }
       }).catch((error) => {
         if (active && current === request) setMessage(fortuneError(error))

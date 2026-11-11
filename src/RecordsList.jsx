@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from './lib/supabaseClient.js'
 import {
   errorText,
-  escapeLike,
   formatDate,
   PAGE_SIZE,
 } from './lib/recordUtils.js'
+import { listPublicRecords, listRecords } from './lib/recordsApi.js'
 import { recordLink } from './lib/navigation.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
 import RecordSource from './RecordSource.jsx'
@@ -28,36 +27,14 @@ export default function RecordsList({
   const loading = useRef(false)
   async function fetchPage(last) {
     if (publicView) {
-      const { data, error } = await supabase
-        .rpc('public_records', {
-          p_query: query,
-          p_tag: tag,
-          p_limit: pageSize + 1,
-          p_before_created_at: last?.created_at || null,
-          p_before_id: last?.id || null,
-        })
-        .retry(false)
-      if (error) throw error
-      return data
+      return listPublicRecords({
+        query,
+        tag,
+        limit: pageSize + 1,
+        cursor: last,
+      })
     }
-    let request = supabase
-      .from('records')
-      .select('id,title,tags,cover_path,created_at,deleted_at')
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(pageSize + 1)
-    request = trash
-      ? request.not('deleted_at', 'is', null)
-      : request.is('deleted_at', null)
-    if (query) request = request.ilike('title', `%${escapeLike(query)}%`)
-    if (tag) request = request.contains('tags', [tag])
-    if (last)
-      request = request.or(
-        `created_at.lt.${last.created_at},and(created_at.eq.${last.created_at},id.lt.${last.id})`,
-      )
-    const { data, error } = await request.retry(false)
-    if (error) throw error
-    return data
+    return listRecords({ query, tag, trash, limit: pageSize + 1, cursor: last })
   }
   useEffect(() => {
     active.current = true

@@ -1,0 +1,23 @@
+[Unit]
+Description=Portfolio notes API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=tap000
+Group=tap000
+WorkingDirectory=/home/tap000/my-portfolio/server
+EnvironmentFile=/etc/portfolio-api.env
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/portfolio-api/covers
+
+[Install]
+WantedBy=multi-user.target

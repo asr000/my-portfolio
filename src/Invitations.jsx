@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from './lib/supabaseClient.js'
+import { apiDelete, apiGet, apiPost } from './lib/apiClient.js'
 import { useAuth } from './lib/authContext.js'
+import { currentUser } from './lib/recordsApi.js'
 import { useNoteAccess } from './lib/useNoteAccess.js'
 import {
   invitationStatus,
@@ -48,10 +49,7 @@ function ActivationForm() {
     setBusy(true)
     setMessage('')
     try {
-      const { data, error } = await supabase
-        .rpc('redeem_note_invitation', { p_code: code })
-        .retry(false)
-      if (error) throw error
+      const data = await apiPost('/api/invitations/redeem', { code })
       if (!data.ok) throw new Error(data.message)
       event.target.reset()
       access.retry()
@@ -135,18 +133,13 @@ function InvitationManager() {
   useEffect(() => {
     if (!author) return
     let active = true
-    supabase
-      .rpc('list_note_invitations')
-      .retry(false)
-      .then(({ data, error }) => {
+    apiGet('/api/invitations')
+      .then((data) => {
         if (!active) return
-        if (error) setListError(errorText(error))
-        else {
-          setRows(data.slice(0, 20))
-          setMore(data.length > 20)
-          setListError('')
-          setLoaded(true)
-        }
+        setRows(data.slice(0, 20))
+        setMore(data.length > 20)
+        setListError('')
+        setLoaded(true)
       })
       .catch((error) => {
         if (active) setListError(errorText(error))
@@ -162,13 +155,11 @@ function InvitationManager() {
     setListError('')
     try {
       const last = rows.at(-1)
-      const { data, error } = await supabase
-        .rpc('list_note_invitations', {
-          p_before_created_at: last.created_at,
-          p_before_id: last.id,
-        })
-        .retry(false)
-      if (error) throw error
+      const params = new URLSearchParams({
+        before_created_at: last.created_at,
+        before_id: last.id,
+      })
+      const data = await apiGet(`/api/invitations?${params}`)
       setRows((old) => [
         ...old,
         ...data
@@ -195,19 +186,10 @@ function InvitationManager() {
     }
     setPending(request)
     try {
-      const { data: account, error: accountError } =
-        await supabase.auth.getUser()
-      if (accountError) throw accountError
-      if (account.user?.id !== auth.user.id)
+      const account = await currentUser()
+      if (account?.id !== auth.user.id)
         throw new Error('账号已变化，请重新登录。')
-      const { data, error } = await supabase
-        .rpc('issue_note_invitation', {
-          p_id: request.id,
-          p_code: request.code,
-          p_days: request.days,
-        })
-        .retry(false)
-      if (error) throw error
+      const data = await apiPost('/api/invitations', request)
       setIssued({ ...data, code: request.code.match(/.{1,8}/g).join('-') })
       setPending(null)
       setAttempt((n) => n + 1)
@@ -226,10 +208,7 @@ function InvitationManager() {
     setBusy(true)
     setMessage('')
     try {
-      const { error } = await supabase
-        .rpc('revoke_note_invitation', { p_id: dialog })
-        .retry(false)
-      if (error) throw error
+      await apiDelete(`/api/invitations/${encodeURIComponent(dialog)}`)
       if (issued?.id === dialog) setIssued(null)
       setDialog(null)
       setAttempt((n) => n + 1)

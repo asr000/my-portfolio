@@ -1,62 +1,65 @@
-import { supabase } from './supabaseClient.js'
+import { apiDelete, apiGet, apiPost } from './apiClient.js'
 import { readLocal, writeLocal } from './localData.js'
 
 export async function currentUser() {
-  const { data: session, error: sessionError } =
-    await supabase.auth.getSession()
-  if (sessionError) throw sessionError
-  if (!session.session) return null
-  const { data, error } = await supabase.auth.getUser()
-  if (error) throw error
-  return data.user
+  const result = await apiGet('/api/auth/me')
+  return result.user
 }
 
 export async function getRecord(id) {
-  const { data, error } = await supabase
-    .from('records')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle()
-    .retry(false)
-  if (error) throw error
-  return data
+  return apiGet(`/api/records/${encodeURIComponent(id)}`)
 }
 
 export async function mutateRecord(request) {
-  if (['publish', 'unpublish'].includes(request.action)) {
-    const { data, error } = await supabase
-      .rpc('set_record_visibility', {
-        p_request_id: request.requestId,
-        p_record_id: request.recordId,
-        p_version: request.version,
-        p_public: request.action === 'publish',
-      })
-      .retry(false)
-    if (error) throw error
-    return data
-  }
-  const { data, error } = await supabase
-    .rpc('mutate_record', {
-      p_request_id: request.requestId,
-      p_action: request.action,
-      p_record_id: request.recordId,
-      p_version: request.version ?? null,
-      p_title: request.title ?? null,
-      p_tags: request.tags ?? null,
-      p_content: request.content ?? null,
-      p_cover_path: request.coverPath ?? null,
-    })
-    .retry(false)
-  if (error) throw error
-  return data
+  return apiPost('/api/records/mutate', request)
 }
 
 export async function getPublicRecord(id) {
-  const { data, error } = await supabase
-    .rpc('public_record', { p_record_id: id })
-    .retry(false)
-  if (error) throw error
-  return data[0] || null
+  try {
+    return await apiGet(`/api/public/records/${encodeURIComponent(id)}`)
+  } catch (error) {
+    if (error.status === 404) return null
+    throw error
+  }
+}
+
+export async function listRecords({
+  query = '', tag = '', trash = false, cursor = null, limit = 13, signal,
+} = {}) {
+  const params = new URLSearchParams({
+    q: query,
+    tag,
+    trash: String(trash),
+    limit: String(limit),
+  })
+  if (cursor) {
+    params.set('before_created_at', cursor.created_at)
+    params.set('before_id', cursor.id)
+  }
+  return apiGet(`/api/records?${params}`, { signal })
+}
+
+export async function listPublicRecords({
+  query = '', tag = '', cursor = null, limit = 13, signal,
+} = {}) {
+  const params = new URLSearchParams({ q: query, tag, limit: String(limit) })
+  if (cursor) {
+    params.set('before_created_at', cursor.created_at)
+    params.set('before_id', cursor.id)
+  }
+  return apiGet(`/api/public/records?${params}`, { signal })
+}
+
+export async function listRecordTags({ publicView = false, trash = false } = {}) {
+  const path = publicView
+    ? '/api/public/tags'
+    : `/api/record-tags?trash=${String(trash)}`
+  return apiGet(path)
+}
+
+export async function canWriteNotes() {
+  const result = await apiGet('/api/note-access')
+  return !!result.can_write
 }
 
 export function queueCleanup(userId, path) {
@@ -71,40 +74,66 @@ export async function cleanupFiles(userId) {
   const remaining = []
   for (const path of pending) {
     try {
-      const { data: references, error } = await supabase
-        .from('records')
-        .select('id')
-        .eq('cover_path', path)
-        .limit(1)
-        .retry(false)
-      if (error || references.length) {
-        remaining.push(path)
-        continue
-      }
-      const { error: removeError } = await supabase.storage
-        .from('record-covers')
-        .remove([path])
-      if (removeError) {
-        remaining.push(path)
-        continue
-      }
-      const { data: stillExists, error: checkError } = await supabase.storage
-        .from('record-covers')
-        .exists(path)
-      if (
-        stillExists ||
-        (checkError &&
-          !['400', '404'].includes(
-            String(checkError.statusCode || checkError.status),
-          ))
+      const result = await apiDelete(
+        `/api/covers/${encodeURIComponent(path)}`,
       )
-        remaining.push(path)
+      if (!result.ok) remaining.push(path)
     } catch {
       remaining.push(path)
     }
   }
   writeLocal(key, remaining)
   return remaining.length
+}
+
+export async function uploadCover(path, file, signal) {
+  const response = await fetch('/api/covers', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': file.type,
+      'X-Cover-Path': path,
+    },
+    body: file,
+    signal,
+  })
+  const text = await response.text()
+  let payload
+  try {
+    payload = text ? JSON.parse(text) : null
+  } catch {
+    throw new Error('笔记服务返回了无法识别的响应。')
+  }
+  if (!response.ok) {
+    const error = new Error(payload?.error || `封面上传失败（${response.status}）。`)
+    error.status = response.status
+    throw error
+  }
+  return payload.path
+}
+
+export async function coverExists(path) {
+  const params = new URLSearchParams({ path })
+  return apiGet(`/api/covers/exists?${params}`)
+}
+
+export async function coverUrl(path) {
+  const response = await fetch(`/api/covers/${encodeURIComponent(path)}`, {
+    credentials: 'include',
+    cache: 'no-store',
+  })
+  if (!response.ok) throw new Error('封面读取失败。')
+  return URL.createObjectURL(await response.blob())
+}
+
+export async function downloadCover(path, signal) {
+  const response = await fetch(`/api/covers/${encodeURIComponent(path)}`, {
+    credentials: 'include',
+    cache: 'no-store',
+    signal,
+  })
+  if (!response.ok) throw new Error(`封面下载失败（${response.status}）。`)
+  return response.blob()
 }
 
 export async function prepareCover(file) {
@@ -122,6 +151,8 @@ export async function prepareCover(file) {
       canvas.toBlob(resolve, 'image/webp', 0.82),
     )
     if (!blob) throw new Error('图片处理失败，请换一张图片。')
+    if (blob.type !== 'image/webp')
+      throw new Error('当前浏览器无法生成 WebP 封面，请换用较新的浏览器。')
     return new File([blob], 'cover.webp', { type: blob.type })
   } finally {
     bitmap.close()

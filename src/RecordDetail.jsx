@@ -10,7 +10,7 @@ import { readLocal, removeLocal, writeLocal } from './lib/localData.js'
 import { errorText, formatDate } from './lib/recordUtils.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import { listReturn, loginLink, recordLink } from './lib/navigation.js'
-import { supabase } from './lib/supabaseClient.js'
+import { canWriteNotes } from './lib/recordsApi.js'
 import PublicRecord from './PublicRecord.jsx'
 import PageTopbar from './PageTopbar.jsx'
 
@@ -50,7 +50,7 @@ export default function RecordDetail({ recordId, manage = false }) {
         const account = await currentUser()
         if (!active) return
         if (!account) {
-          setStatus('signed-out')
+          setStatus(manage ? 'signed-out' : 'public')
           return
         }
         setUser(account)
@@ -62,11 +62,15 @@ export default function RecordDetail({ recordId, manage = false }) {
           setStatus(data ? 'ready' : manage ? 'not-found' : 'public')
         }
         if (manage && data) {
-          const { data: allowed, error } = await supabase
-            .rpc('can_write_notes')
-            .retry(false)
+          let allowed = false
+          let error = null
+          try {
+            allowed = await canWriteNotes()
+          } catch (err) {
+            error = err
+          }
           if (active) {
-            setCanPublish(!error && !!allowed)
+            setCanPublish(!error && allowed)
             setPublicationError(error ? errorText(error) : '')
           }
         }

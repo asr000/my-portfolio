@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from './lib/supabaseClient.js'
+import { apiPost } from './lib/apiClient.js'
 import { useAuth } from './lib/authContext.js'
 import { safeDestination } from './lib/navigation.js'
 import { authErrorText } from './lib/accountUtils.js'
@@ -28,19 +28,13 @@ function Login() {
     setMessage('')
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      await apiPost('/api/auth/login', {
         email,
         password,
       })
-
-      if (error) {
-        setMessage(`登录失败：${authErrorText(error)}`)
-        return
-      }
-
       window.location.replace(next)
-    } catch {
-      setMessage('登录请求未完成，请检查网络后重试。')
+    } catch (error) {
+      setMessage(`登录失败：${authErrorText(error)}`)
     } finally {
       setIsSubmitting(false)
     }

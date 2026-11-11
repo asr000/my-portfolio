@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from './lib/supabaseClient.js'
+import { apiGet, apiPut } from './lib/apiClient.js'
 import { errorText } from './lib/recordUtils.js'
 
 export default function NoteProfile() {
@@ -11,16 +11,11 @@ export default function NoteProfile() {
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let active = true
-    supabase
-      .rpc('note_profile')
-      .retry(false)
-      .then(({ data, error }) => {
+    apiGet('/api/note-profile')
+      .then((data) => {
         if (!active) return
-        if (error) setError(errorText(error))
-        else {
-          setName(data.display_name)
-          setError('')
-        }
+        setName(data.display_name)
+        setError('')
       })
       .catch((err) => {
         if (active) setError(errorText(err))
@@ -39,10 +34,9 @@ export default function NoteProfile() {
     setError('')
     setMessage('')
     try {
-      const { data, error } = await supabase
-        .rpc('set_note_display_name', { p_display_name: name.trim() })
-        .retry(false)
-      if (error) throw error
+      const data = await apiPut('/api/note-profile', {
+        display_name: name.trim(),
+      })
       setName(data.display_name)
       setMessage('昵称已保存，公开笔记的来源会一起更新。')
     } catch (err) {

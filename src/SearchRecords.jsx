@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from './lib/supabaseClient.js'
+import { listRecordTags } from './lib/recordsApi.js'
 import { errorText } from './lib/recordUtils.js'
 import RecordsLayout, { RecordsAccess } from './RecordsLayout.jsx'
 import RecordsList from './RecordsList.jsx'
@@ -35,19 +35,10 @@ function SearchForm({ publicView = false }) {
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let active = true
-    supabase
-      .rpc(
-        publicView ? 'public_record_tags' : 'record_tags',
-        publicView ? {} : { p_trash: false },
-      )
-      .retry(false)
-      .then(({ data, error }) => {
+    listRecordTags({ publicView })
+      .then((data) => {
         if (!active) return
-        if (error) {
-          setTagError(errorText(error))
-          return
-        }
-        setTags(data.map((row) => row.tag))
+        setTags(data)
         setTagError('')
       })
       .catch((err) => {

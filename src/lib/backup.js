@@ -1,6 +1,5 @@
 import { strToU8, zip } from 'fflate'
-import { supabase } from './supabaseClient.js'
-import { currentUser } from './recordsApi.js'
+import { currentUser, downloadCover, listRecords } from './recordsApi.js'
 import {
   BACKUP_LIMIT,
   backupCoverName,
@@ -14,21 +13,12 @@ async function readRecords(user, includeTrash, signal, progress) {
   let size = 0
   while (true) {
     signal.throwIfAborted()
-    let request = supabase
-      .from('records')
-      .select(
-        'id,user_id,title,tags,content,cover_path,created_at,updated_at,deleted_at,version,is_public',
-      )
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(200)
-    if (!includeTrash) request = request.is('deleted_at', null)
-    if (cursor)
-      request = request.or(
-        `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`,
-      )
-    const { data, error } = await request.abortSignal(signal).retry(false)
-    if (error) throw error
+    const data = await listRecords({
+      trash: includeTrash ? 'all' : false,
+      limit: 200,
+      cursor,
+      signal,
+    })
     for (const record of data) {
       if (record.user_id !== user.id)
         throw new Error('账号状态发生变化，请重新登录后导出。')
@@ -49,50 +39,11 @@ async function readRecords(user, includeTrash, signal, progress) {
 }
 
 async function coverBytes(path, signal, remaining) {
-  const { data, error } = await supabase.storage
-    .from('record-covers')
-    .createSignedUrl(path, 120)
-  if (error) throw error
   signal.throwIfAborted()
-  const controller = new AbortController()
-  const abort = () => controller.abort(signal.reason)
-  signal.addEventListener('abort', abort, { once: true })
-  const timer = setTimeout(
-    () => controller.abort(new Error('封面下载超时，请重试。')),
-    30000,
-  )
-  try {
-    const response = await fetch(data.signedUrl, { signal: controller.signal })
-    if (!response.ok)
-      throw new Error(`封面下载失败（${response.status}），本次 ZIP 未生成。`)
-    if (Number(response.headers.get('Content-Length')) > remaining)
-      throw new Error('记录与封面超过 50 MB，请改用 JSON 备份文字。')
-    const reader = response.body.getReader()
-    const parts = []
-    let size = 0
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        size += value.length
-        if (size > remaining)
-          throw new Error('记录与封面超过 50 MB，请改用 JSON 备份文字。')
-        parts.push(value)
-      }
-    } finally {
-      await reader.cancel().catch(() => {})
-    }
-    const result = new Uint8Array(size)
-    let offset = 0
-    for (const part of parts) {
-      result.set(part, offset)
-      offset += part.length
-    }
-    return result
-  } finally {
-    clearTimeout(timer)
-    signal.removeEventListener('abort', abort)
-  }
+  const blob = await downloadCover(path, signal)
+  if (blob.size > remaining)
+    throw new Error('记录与封面超过 50 MB，请改用 JSON 备份文字。')
+  return new Uint8Array(await blob.arrayBuffer())
 }
 
 function archive(files, signal) {
@@ -172,7 +123,7 @@ export async function createBackup({
   progress('正在打包记录与封面…')
   files['records.json'] = jsonBytes
   files['README.txt'] = strToU8(
-    'Re:代码生活 记录备份\n\nrecords.json 保存记录文字、标签、时间和回收站状态。\ncovers/ 保存封面原文件，记录中的 cover_file 对应该文件。\n不包含登录凭证、本机未保存草稿，或 Markdown 中引用的外部图片。\n本备份可在本地解压查看；当前网站尚无自动导入入口。\n',
+    'Re:代码生活 记录备份\n\nrecords.json 保存记录文字、标签、时间和回收站状态。\ncovers/ 保存封面原文件，记录中的 cover_file 对应该文件。\n不包含登录凭证、本机未保存草稿，或 Markdown 中引用的外部图片。\n请在网站的数据备份页面导入 JSON 或 ZIP；已有记录不会被覆盖。\n',
   )
   const bytes = await archive(files, signal)
   signal.throwIfAborted()

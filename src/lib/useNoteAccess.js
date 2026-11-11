@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from './authContext.js'
-import { supabase } from './supabaseClient.js'
+import { apiGet } from './apiClient.js'
 import { errorText } from './recordUtils.js'
 
 export function useNoteAccess() {
@@ -11,15 +11,13 @@ export function useNoteAccess() {
   useEffect(() => {
     if (!userId) return
     let active = true
-    supabase
-      .rpc('note_access')
-      .retry(false)
-      .then(({ data, error }) => {
+    apiGet('/api/note-access')
+      .then((data) => {
         if (active)
           setState({
             userId,
-            data: error ? null : data,
-            error: error ? errorText(error) : '',
+            data,
+            error: '',
           })
       })
       .catch((error) => {

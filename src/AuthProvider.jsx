@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AuthContext, isSessionError } from './lib/authContext.js'
-import { supabase } from './lib/supabaseClient.js'
 import { currentUser } from './lib/recordsApi.js'
 import { errorText } from './lib/recordUtils.js'
 import { initialAuthCallback } from './lib/authCallback.js'
@@ -12,9 +11,7 @@ export default function AuthProvider({ children }) {
     message: '',
   })
   const generation = useRef(0)
-  const [recovery, setRecovery] = useState(
-    initialAuthCallback.recovery && !initialAuthCallback.failed,
-  )
+  const recovery = initialAuthCallback.recovery && !initialAuthCallback.failed
   const refresh = useCallback(async () => {
     const request = ++generation.current
     try {
@@ -40,31 +37,17 @@ export default function AuthProvider({ children }) {
     refresh()
   }, [refresh])
   useEffect(() => {
-    let initialCheck
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      // Keep this callback synchronous; SDK calls inside it can hold the auth lock.
-      if (event === 'INITIAL_SESSION') {
-        initialCheck = setTimeout(refresh, 0)
-        return
-      }
-      invalidate()
-      if (event === 'SIGNED_OUT') setRecovery(false)
-      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
-      if (event === 'SIGNED_OUT')
-        setState({
-          user: null,
-          status: 'signed-out',
-          message: '登录状态已结束，请重新登录。',
-        })
-      else if (session?.user)
-        setState({ user: session.user, status: 'ready', message: '' })
-    })
+    const initialCheck = setTimeout(refresh, 0)
+    const refreshOnFocus = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnFocus)
     return () => {
       clearTimeout(initialCheck)
       invalidate()
-      subscription.unsubscribe()
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshOnFocus)
     }
   }, [refresh, invalidate])
   return (

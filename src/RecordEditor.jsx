@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { supabase } from './lib/supabaseClient.js'
 import {
+  coverExists,
   cleanupFiles,
   currentUser,
   getRecord,
   mutateRecord,
   prepareCover,
   queueCleanup,
+  uploadCover,
 } from './lib/recordsApi.js'
 import {
   draftKey,
@@ -264,15 +265,8 @@ function EditorForm({ user, record, draft, back }) {
     let recoveredPath = candidate.uploadedPath || null
     if (!recoveredPath && candidate.uploadIntent) {
       try {
-        const { data: exists, error } = await supabase.storage
-          .from('record-covers')
-          .exists(candidate.uploadIntent)
+        const { exists } = await coverExists(candidate.uploadIntent)
         if (exists) recoveredPath = candidate.uploadIntent
-        else if (
-          error &&
-          !['400', '404'].includes(String(error.statusCode || error.status))
-        )
-          throw error
       } catch (err) {
         setMessage(
           `无法确认上次图片上传结果：${errorText(err)} 请稍后再恢复草稿。`,
@@ -370,16 +364,7 @@ function EditorForm({ user, record, draft, back }) {
             uploadIntent: path,
             savedAt: new Date().toISOString(),
           })
-          const { error } = await supabase.storage
-            .from('record-covers')
-            .upload(path, file, { contentType: file.type, upsert: false })
-          if (error) {
-            if (String(error.statusCode) !== '409') throw error
-            const { data: exists, error: existsError } = await supabase.storage
-              .from('record-covers')
-              .exists(path)
-            if (existsError || !exists) throw error
-          }
+          await uploadCover(path, file)
           setUploadedPath(path)
           persist(null, path)
         }

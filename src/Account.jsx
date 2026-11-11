@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from './lib/authContext.js'
-import { supabase } from './lib/supabaseClient.js'
+import { apiPost } from './lib/apiClient.js'
 import { errorText } from './lib/recordUtils.js'
 import RecordsLayout from './RecordsLayout.jsx'
 import { AuthNotice } from './AuthAccess.jsx'
@@ -18,9 +18,9 @@ export default function Account() {
     setBusy(true)
     setMessage('')
     try {
-      const { error } = await supabase.auth.signOut({ scope: 'local' })
-      if (error) throw error
-      setMessage('已退出当前设备。你的记录仍保存在云端，本机文字草稿也会保留。')
+      await apiPost('/api/auth/logout', {})
+      await auth.refresh()
+      setMessage('已退出当前设备。本机文字草稿仍会保留。')
     } catch (err) {
       setMessage(errorText(err))
     } finally {

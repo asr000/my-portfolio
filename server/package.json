@@ -1,0 +1,13 @@
+{
+  "name": "portfolio-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=.env.local src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "nodemailer": "^10.5.0",
+    "pg": "^8.23.1"
+  }
+}
