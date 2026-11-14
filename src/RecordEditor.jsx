@@ -22,6 +22,7 @@ import {
   formatDate,
   validateRecord,
 } from './lib/recordUtils.js'
+import { inlineImagePaths } from './lib/backupFormat.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
 import { listReturn, loginLink, recordLink } from './lib/navigation.js'
 import PageTopbar from './PageTopbar.jsx'
@@ -136,12 +137,16 @@ function EditorForm({ user, record, draft, back }) {
   const uploadIntent = useRef(draft?.uploadIntent || null)
   const imageGeneration = useRef(0)
   const input = useRef(null)
+  const inlineImageInput = useRef(null)
+  const contentInput = useRef(null)
+  const insertedImages = useRef(new Set())
   const key = draftKey(user.id, record?.id)
   const dirty =
     JSON.stringify(form) !== JSON.stringify(baseline) ||
     !!file ||
     !!uploadedPath ||
-    !!pending
+    !!pending ||
+    imageBusy
   const disabled = busy || !!pending || !!candidate
   const lastDraft = useRef(null)
   useEffect(() => {
@@ -324,6 +329,43 @@ function EditorForm({ user, record, draft, back }) {
       if (generation === imageGeneration.current) setImageBusy(false)
     }
   }
+  async function chooseInlineImage(event) {
+    const picker = event.currentTarget
+    const selected = picker.files?.[0]
+    if (!selected) return
+    const textarea = contentInput.current
+    const content = form.content
+    const start = textarea?.selectionStart ?? content.length
+    const end = textarea?.selectionEnd ?? start
+    setImageBusy(true)
+    setMessage('正在处理并上传正文图片…')
+    try {
+      const image = await prepareCover(selected)
+      const path = `${user.id}/${crypto.randomUUID()}.${coverFileExtension(image)}`
+      await uploadCover(path, image)
+      insertedImages.current.add(path)
+
+      const markdown = `![图片](/api/covers/${path})`
+      const before = content.slice(0, start)
+      const after = content.slice(end)
+      const prefix = before && !before.endsWith('\n') ? '\n\n' : ''
+      const suffix = after && !after.startsWith('\n') ? '\n\n' : ''
+      const nextContent = `${before}${prefix}${markdown}${suffix}${after}`
+      setForm((current) => ({ ...current, content: nextContent }))
+      setMessage('正文图片已插入；保存记录后，访客也能看到。')
+      const cursor = before.length + prefix.length + markdown.length
+      requestAnimationFrame(() => {
+        if (!textarea) return
+        textarea.focus()
+        textarea.setSelectionRange(cursor, cursor)
+      })
+    } catch (err) {
+      setMessage(errorText(err))
+    } finally {
+      picker.value = ''
+      setImageBusy(false)
+    }
+  }
   function removeCover() {
     imageGeneration.current += 1
     if (uploadedPath || uploadIntent.current)
@@ -386,6 +428,16 @@ function EditorForm({ user, record, draft, back }) {
       setMessage('记录已保存，正在处理旧封面…')
       let notice = ''
       try {
+        const savedImages = new Set(
+          inlineImagePaths(result.record?.content, user.id),
+        )
+        for (const path of [
+          ...inlineImagePaths(record?.content, user.id),
+          ...insertedImages.current,
+        ]) {
+          if (!savedImages.has(path)) queueCleanup(user.id, path)
+        }
+        insertedImages.current.clear()
         if (
           result.old_cover_path &&
           result.old_cover_path !== result.record.cover_path
@@ -514,6 +566,13 @@ function EditorForm({ user, record, draft, back }) {
             >
               预览
             </button>
+            <button
+              type="button"
+              disabled={disabled || imageBusy}
+              onClick={() => inlineImageInput.current?.click()}
+            >
+              插入图片
+            </button>
             <a
               className="text-link"
               href="/?view=markdown-help"
@@ -523,16 +582,25 @@ function EditorForm({ user, record, draft, back }) {
               写作说明 ↗
             </a>
           </div>
+          <input
+            ref={inlineImageInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            disabled={disabled || imageBusy}
+            onChange={chooseInlineImage}
+          />
           <small id="record-content-help">
             支持 Markdown 和数学公式：行内用 <code>$x^2$</code>，独立公式用两个单独成行的 <code>$$</code> 包围。切换到预览查看效果。
           </small>
           <textarea
+            ref={contentInput}
             id="record-content"
             name="content"
             aria-describedby="record-content-help"
             rows={10}
             maxLength={100000}
-            disabled={disabled}
+            disabled={disabled || imageBusy}
             hidden={contentView !== 'write'}
             value={form.content}
             onChange={(e) => setForm({ ...form, content: e.target.value })}
@@ -560,6 +628,7 @@ function EditorForm({ user, record, draft, back }) {
           <small>
             JPEG、PNG、WebP，原图不超过 5 MB；自动缩小至最长边 1600 像素并压缩。
           </small>
+          <small>插入图片后会上传到笔记服务器，写进正文的 Markdown；ZIP 备份会包含这些图片。</small>
           {imageBusy && <p role="status">正在处理图片…</p>}
           {preview ? (
             <img className="cover-preview" src={preview} alt="将保存的封面" />

@@ -34,3 +34,17 @@ export function backupCoverName(path, index) {
     : 'bin'
   return `covers/cover-${index + 1}.${safe}`
 }
+
+export function inlineImagePaths(content, userId) {
+  const paths = [...String(content || '').matchAll(
+    /\/api\/covers\/([0-9a-f-]{36}\/[0-9a-f-]{36}\.(?:webp|jpe?g|png))/gi,
+  )].map((match) => match[1])
+  return [...new Set(paths)].filter((path) =>
+    path.slice(0, 37).toLowerCase() === `${userId}/`.toLowerCase(),
+  )
+}
+
+export function backupImageName(path, index) {
+  const extension = path.split('.').at(-1).toLowerCase()
+  return `images/image-${index + 1}.${extension}`
+}

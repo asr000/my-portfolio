@@ -108,6 +108,10 @@ function BackupForm({ user }) {
           result.missingCovers
             ? `有 ${result.missingCovers} 条记录没有随备份提供封面文件。`
             : ''
+        }${
+          result.missingImages
+            ? `有 ${result.missingImages} 张正文图片没有随备份提供。`
+            : ''
         }`,
       )
     } catch (err) {

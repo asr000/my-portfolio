@@ -3,7 +3,9 @@ import { currentUser, downloadCover, listRecords } from './recordsApi.js'
 import {
   BACKUP_LIMIT,
   backupCoverName,
+  backupImageName,
   backupDocument,
+  inlineImagePaths,
 } from './backupFormat.js'
 
 async function readRecords(user, includeTrash, signal, progress) {
@@ -98,6 +100,22 @@ export async function createBackup({
       for (const row of document.records)
         if (row.cover_path === path) row.cover_file = name
     }
+    const imagePaths = [
+      ...new Set(records.flatMap((row) => inlineImagePaths(row.content, user.id))),
+    ]
+    for (const [index, path] of imagePaths.entries()) {
+      signal.throwIfAborted()
+      progress(`正在备份正文图片 ${index + 1}/${imagePaths.length}…`)
+      const name = backupImageName(path, index)
+      const bytes = await coverBytes(path, signal, BACKUP_LIMIT - size)
+      size += bytes.length
+      files[name] = bytes
+      for (const row of document.records) {
+        if (!inlineImagePaths(row.content, user.id).includes(path)) continue
+        row.inline_image_files ||= {}
+        row.inline_image_files[path] = name
+      }
+    }
   }
   // Validate again before exposing a downloadable file, including after a tab changes accounts.
   if ((await currentUser())?.id !== user.id)
@@ -123,7 +141,7 @@ export async function createBackup({
   progress('正在打包记录与封面…')
   files['records.json'] = jsonBytes
   files['README.txt'] = strToU8(
-    'Re:代码生活 记录备份\n\nrecords.json 保存记录文字、标签、时间和回收站状态。\ncovers/ 保存封面原文件，记录中的 cover_file 对应该文件。\n不包含登录凭证、本机未保存草稿，或 Markdown 中引用的外部图片。\n请在网站的数据备份页面导入 JSON 或 ZIP；已有记录不会被覆盖。\n',
+    'Re:代码生活 记录备份\n\nrecords.json 保存记录文字、标签、时间和回收站状态。\ncovers/ 保存封面原文件，记录中的 cover_file 对应该文件。\nimages/ 保存 Markdown 正文中引用的站内图片，记录中的 inline_image_files 对应该文件。\n不包含登录凭证、本机未保存草稿，或 Markdown 中引用的外部图片。\n请在网站的数据备份页面导入 JSON 或 ZIP；已有记录不会被覆盖。\n',
   )
   const bytes = await archive(files, signal)
   signal.throwIfAborted()

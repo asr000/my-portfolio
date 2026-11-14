@@ -130,20 +130,28 @@ async function getCover(request, response, encodedPath) {
   const { path, file, contentType } = parsePath(encodedPath)
   let allowed = false
   if (user) {
-    const owned = await pool.query(
-      'SELECT 1 FROM records WHERE user_id = $1 AND cover_path = $2 LIMIT 1',
-      [user.id, path],
-    )
-    allowed = owned.rows.length > 0
+    allowed = path.slice(0, 37).toLowerCase() === `${user.id}/`.toLowerCase()
+    if (!allowed) {
+      const owned = await pool.query(
+        `SELECT 1 FROM records
+         WHERE user_id = $1
+           AND (cover_path = $2 OR position($3 in content) > 0)
+         LIMIT 1`,
+        [user.id, path, `/api/covers/${path}`],
+      )
+      allowed = owned.rows.length > 0
+    }
   }
   if (!allowed) {
     const published = await pool.query(
       `SELECT 1 FROM records r JOIN users u ON u.id = r.user_id
-       WHERE r.cover_path = $1 AND r.is_public AND r.deleted_at IS NULL
+       WHERE (r.cover_path = $1 OR position($2 in r.content) > 0)
+         AND r.user_id::text = split_part($1, '/', 1)
+         AND r.is_public AND r.deleted_at IS NULL
          AND (u.is_author OR (u.email_verified_at IS NOT NULL AND EXISTS (
            SELECT 1 FROM note_members m WHERE m.user_id = u.id
          ))) LIMIT 1`,
-      [path],
+      [path, `/api/covers/${path}`],
     )
     allowed = published.rows.length > 0
   }
@@ -164,8 +172,10 @@ async function getCover(request, response, encodedPath) {
 async function removeCover(response, user, encodedPath) {
   const { path, file } = parsePath(encodedPath, user.id)
   const references = await pool.query(
-    'SELECT 1 FROM records WHERE cover_path = $1 LIMIT 1',
-    [path],
+    `SELECT 1 FROM records
+     WHERE cover_path = $1 OR position($2 in content) > 0
+     LIMIT 1`,
+    [path, `/api/covers/${path}`],
   )
   if (references.rows.length) {
     sendJson(response, 200, { ok: true, deleted: false })

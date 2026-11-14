@@ -1,6 +1,13 @@
 import { Unzip, UnzipInflate } from 'fflate'
 import { apiPost } from './apiClient.js'
-import { currentUser, prepareCover } from './recordsApi.js'
+import {
+  cleanupFiles,
+  coverFileExtension,
+  currentUser,
+  prepareCover,
+  queueCleanup,
+  uploadCover,
+} from './recordsApi.js'
 import { BACKUP_LIMIT } from './backupFormat.js'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -53,7 +60,8 @@ function unzipLimited(data) {
     }
     const isDocument = file.name === 'records.json'
     const isCover = /^covers\/cover-[0-9]+\.(?:webp|png|jpg|jpeg)$/i.test(file.name)
-    if (!isDocument && !isCover) return
+    const isImage = /^images\/image-[0-9]+\.(?:webp|png|jpg|jpeg)$/i.test(file.name)
+    if (!isDocument && !isCover && !isImage) return
     if (Object.prototype.hasOwnProperty.call(files, file.name)) {
       failure = new Error(`ZIP 中出现重复文件：${file.name}`)
       file.terminate()
@@ -76,7 +84,7 @@ function unzipLimited(data) {
       if (
         fileSize > BACKUP_LIMIT ||
         totalSize > BACKUP_LIMIT ||
-        (isCover && fileSize > 5 * 1024 * 1024)
+        ((isCover || isImage) && fileSize > 5 * 1024 * 1024)
       ) {
         failure = new Error('ZIP 解压后的内容超过允许大小。')
         file.terminate()
@@ -151,6 +159,61 @@ async function coverFor(row, files, signal) {
   }
 }
 
+function imageType(name) {
+  const extension = name.split('.').at(-1).toLowerCase()
+  return {
+    webp: 'image/webp',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+  }[extension]
+}
+
+async function inlineImagesFor(row, files, sourceOwnerId, user, signal) {
+  const mappings = row.inline_image_files
+  if (!mappings || typeof mappings !== 'object' || Array.isArray(mappings))
+    return { content: row.content, uploaded: [], missing: 0 }
+
+  let content = row.content
+  const uploaded = []
+  let missing = 0
+  try {
+    for (const [oldPath, name] of Object.entries(mappings)) {
+      signal.throwIfAborted()
+      const oldUrl = `/api/covers/${oldPath}`
+      if (!content.includes(oldUrl)) continue
+      if (
+        !sourceOwnerId ||
+        oldPath.slice(0, 37).toLowerCase() !== `${sourceOwnerId}/`.toLowerCase() ||
+        !/^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(?:webp|jpe?g|png)$/i.test(oldPath) ||
+        typeof name !== 'string' ||
+        !/^images\/image-[0-9]+\.(?:webp|png|jpg|jpeg)$/i.test(name)
+      ) {
+        missing += 1
+        continue
+      }
+      const bytes = files?.[name]
+      const type = imageType(name)
+      if (!bytes || !type) {
+        missing += 1
+        continue
+      }
+      const processed = await prepareCover(
+        new File([bytes], name.split('/').at(-1), { type }),
+      )
+      const path = `${user.id}/${crypto.randomUUID()}.${coverFileExtension(processed)}`
+      uploaded.push(path)
+      await uploadCover(path, processed, signal)
+      content = content.split(oldUrl).join(`/api/covers/${path}`)
+    }
+  } catch (error) {
+    for (const path of uploaded) queueCleanup(user.id, path)
+    await cleanupFiles(user.id).catch(() => {})
+    throw error
+  }
+  return { content, uploaded, missing }
+}
+
 export async function importBackup({ file, user, signal, progress }) {
   const account = await currentUser()
   if (account?.id !== user.id)
@@ -164,17 +227,46 @@ export async function importBackup({ file, user, signal, progress }) {
   let imported = 0
   let alreadyExists = 0
   let missingCovers = 0
+  let missingImages = 0
   for (const [index, row] of document.records.entries()) {
     signal.throwIfAborted()
     const { cover, missing } = await coverFor(row, files, signal)
     if (missing) missingCovers += 1
-    const result = await apiPost('/api/records/import', { record: row, cover }, { signal })
-    if (result.imported) imported += 1
-    else alreadyExists += 1
+    const images = await inlineImagesFor(
+      row,
+      files,
+      document.owner?.id,
+      user,
+      signal,
+    )
+    missingImages += images.missing
+    try {
+      const result = await apiPost(
+        '/api/records/import',
+        { record: { ...row, content: images.content }, cover },
+        { signal },
+      )
+      if (result.imported) imported += 1
+      else {
+        alreadyExists += 1
+        for (const path of images.uploaded) queueCleanup(user.id, path)
+      }
+    } catch (error) {
+      for (const path of images.uploaded) queueCleanup(user.id, path)
+      await cleanupFiles(user.id).catch(() => {})
+      throw error
+    }
+    await cleanupFiles(user.id).catch(() => {})
     progress(`正在导入 ${index + 1}/${document.records.length} 条记录…`)
   }
 
   if ((await currentUser())?.id !== user.id)
     throw new Error('账号已变化，导入已停止。')
-  return { imported, alreadyExists, missingCovers, total: document.records.length }
+  return {
+    imported,
+    alreadyExists,
+    missingCovers,
+    missingImages,
+    total: document.records.length,
+  }
 }
