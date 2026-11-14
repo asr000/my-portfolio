@@ -147,14 +147,41 @@ export async function prepareCover(file) {
     canvas.width = Math.max(1, Math.round(bitmap.width * scale))
     canvas.height = Math.max(1, Math.round(bitmap.height * scale))
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise((resolve) =>
+    const webp = await new Promise((resolve) =>
       canvas.toBlob(resolve, 'image/webp', 0.82),
     )
-    if (!blob) throw new Error('图片处理失败，请换一张图片。')
-    if (blob.type !== 'image/webp')
-      throw new Error('当前浏览器无法生成 WebP 封面，请换用较新的浏览器。')
-    return new File([blob], 'cover.webp', { type: blob.type })
+    if (webp?.type === 'image/webp' && webp.size <= 5 * 1024 * 1024)
+      return new File([webp], 'cover.webp', { type: webp.type })
+
+    // Some browsers display WebP but cannot encode it with canvas.toBlob.
+    // Keep JPEGs as JPEGs and preserve transparency for PNG/WebP inputs.
+    const fallbackType = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png'
+    const fallback = await new Promise((resolve) =>
+      canvas.toBlob(
+        resolve,
+        fallbackType,
+        fallbackType === 'image/jpeg' ? 0.82 : undefined,
+      ),
+    )
+    if (!fallback || fallback.type !== fallbackType)
+      throw new Error('当前浏览器无法处理这张封面，请用 Chrome 重试。')
+    if (fallback.size > 5 * 1024 * 1024)
+      throw new Error('封面处理后仍超过 5 MB，请换用较小的图片。')
+
+    const extension = fallbackType === 'image/jpeg' ? 'jpg' : 'png'
+    return new File([fallback], `cover.${extension}`, { type: fallbackType })
   } finally {
     bitmap.close()
   }
+}
+
+export function coverFileExtension(file) {
+  const extensionByType = {
+    'image/webp': 'webp',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+  }
+  const extension = extensionByType[file?.type]
+  if (!extension) throw new Error('封面格式不受支持。')
+  return extension
 }

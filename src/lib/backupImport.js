@@ -139,13 +139,13 @@ async function coverFor(row, files, signal) {
   if (!type) return { cover: null, missing: true }
   signal.throwIfAborted()
   const source = new File([bytes], name.split('/').at(-1), { type })
-  const webp = await prepareCover(source)
-  if (webp.size > 5 * 1024 * 1024)
+  const processedCover = await prepareCover(source)
+  if (processedCover.size > 5 * 1024 * 1024)
     throw new Error(`封面 ${name} 处理后仍超过 5 MB。`)
   return {
     cover: {
-      content_type: 'image/webp',
-      base64: base64(new Uint8Array(await webp.arrayBuffer())),
+      content_type: processedCover.type,
+      base64: base64(new Uint8Array(await processedCover.arrayBuffer())),
     },
     missing: false,
   }

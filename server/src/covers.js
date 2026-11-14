@@ -7,6 +7,17 @@ import { getAuthenticatedUser } from './auth.js'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const maxCoverBytes = 5 * 1024 * 1024
+const contentTypeByExtension = {
+  webp: 'image/webp',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+}
+const extensionByContentType = {
+  'image/webp': 'webp',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+}
 const root = resolve(
   process.env.COVER_DIR || fileURLToPath(new URL('../data/covers', import.meta.url)),
 )
@@ -29,14 +40,16 @@ function parsePath(value, userId) {
   } catch {
     throw httpError(400, '封面路径无效。')
   }
-  const match = decoded.match(/^([0-9a-f-]{36})\/([0-9a-f-]{36})\.webp$/i)
+  const match = decoded.match(/^([0-9a-f-]{36})\/([0-9a-f-]{36})\.(webp|jpe?g|png)$/i)
   if (!match || !uuidPattern.test(match[1]) || !uuidPattern.test(match[2]))
     throw httpError(400, '封面路径无效。')
   if (userId && match[1].toLowerCase() !== userId.toLowerCase())
     throw httpError(404, '封面不存在。')
+  const extension = match[3].toLowerCase()
   return {
-    path: `${match[1]}/${match[2]}.webp`,
-    file: resolve(root, match[1], `${match[2]}.webp`),
+    path: `${match[1]}/${match[2]}.${extension}`,
+    file: resolve(root, match[1], `${match[2]}.${extension}`),
+    contentType: contentTypeByExtension[extension],
   }
 }
 
@@ -63,9 +76,15 @@ async function requireWriter(user) {
 
 async function uploadCover(request, response, user) {
   await requireWriter(user)
-  if (!String(request.headers['content-type'] || '').toLowerCase().startsWith('image/webp'))
-    throw httpError(415, '封面必须是 WebP 图片。')
-  const { path, file } = parsePath(request.headers['x-cover-path'] || '', user.id)
+  const { path, file, contentType: expectedContentType } = parsePath(
+    request.headers['x-cover-path'] || '',
+    user.id,
+  )
+  const contentType = String(request.headers['content-type'] || '')
+    .toLowerCase()
+    .split(';')[0]
+  if (contentType !== expectedContentType)
+    throw httpError(415, '封面文件格式与路径不一致。')
   const bytes = await readBody(request)
   await mkdir(dirname(file), { recursive: true })
   try {
@@ -79,8 +98,10 @@ async function uploadCover(request, response, user) {
   sendJson(response, 200, { path })
 }
 
-export async function saveImportedCover(userId, bytes) {
-  const path = `${userId}/${randomUUID()}.webp`
+export async function saveImportedCover(userId, bytes, contentType = 'image/webp') {
+  const extension = extensionByContentType[contentType]
+  if (!extension) throw httpError(415, '备份封面格式不受支持。')
+  const path = `${userId}/${randomUUID()}.${extension}`
   const { file } = parsePath(path, userId)
   await mkdir(dirname(file), { recursive: true })
   await writeFile(file, bytes, { flag: 'wx', mode: 0o600 })
@@ -106,7 +127,7 @@ async function coverExists(response, user, encodedPath) {
 
 async function getCover(request, response, encodedPath) {
   const user = await getAuthenticatedUser(request)
-  const { path, file } = parsePath(encodedPath)
+  const { path, file, contentType } = parsePath(encodedPath)
   let allowed = false
   if (user) {
     const owned = await pool.query(
@@ -132,7 +153,7 @@ async function getCover(request, response, encodedPath) {
     throw error
   })
   response.writeHead(200, {
-    'Content-Type': 'image/webp',
+    'Content-Type': contentType,
     'Content-Length': String(bytes.length),
     'Cache-Control': 'private, no-store',
     'X-Content-Type-Options': 'nosniff',

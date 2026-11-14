@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
+  coverFileExtension,
   coverExists,
   cleanupFiles,
   currentUser,
@@ -354,7 +355,8 @@ function EditorForm({ user, record, draft, back }) {
         if (file && !uploadedPath) {
           setMessage('正在上传封面…')
           path =
-            uploadIntent.current || `${user.id}/${crypto.randomUUID()}.webp`
+            uploadIntent.current ||
+            `${user.id}/${crypto.randomUUID()}.${coverFileExtension(file)}`
           uploadIntent.current = path
           writeLocal(key, {
             form,

@@ -134,21 +134,42 @@ function validateImport(body) {
     throw httpError(400, '回收站中的记录不能标记为公开。')
 
   let coverBytes = null
+  let coverContentType = null
   const encoded = body.cover?.base64
   if (encoded !== undefined) {
+    const contentType = body.cover?.content_type
+    const supportedContentTypes = ['image/webp', 'image/jpeg', 'image/png']
     if (
-      body.cover?.content_type !== 'image/webp' ||
+      !supportedContentTypes.includes(contentType) ||
       typeof encoded !== 'string' ||
       encoded.length > Math.ceil((5 * 1024 * 1024 * 4) / 3) + 8 ||
       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)
     ) throw httpError(400, '备份封面格式无效。')
     coverBytes = Buffer.from(encoded, 'base64')
+    const isWebp =
+      coverBytes.length >= 12 &&
+      coverBytes.toString('ascii', 0, 4) === 'RIFF' &&
+      coverBytes.toString('ascii', 8, 12) === 'WEBP'
+    const isJpeg =
+      coverBytes.length >= 3 &&
+      coverBytes[0] === 0xff &&
+      coverBytes[1] === 0xd8 &&
+      coverBytes[2] === 0xff
+    const isPng =
+      coverBytes.length >= 8 &&
+      coverBytes
+        .subarray(0, 8)
+        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    const signatureMatches =
+      (contentType === 'image/webp' && isWebp) ||
+      (contentType === 'image/jpeg' && isJpeg) ||
+      (contentType === 'image/png' && isPng)
     if (
       coverBytes.length > 5 * 1024 * 1024 ||
       coverBytes.toString('base64') !== encoded ||
-      coverBytes.toString('ascii', 0, 4) !== 'RIFF' ||
-      coverBytes.toString('ascii', 8, 12) !== 'WEBP'
-    ) throw httpError(400, '备份封面不是有效的 WebP 图片。')
+      !signatureMatches
+    ) throw httpError(400, '备份封面格式与文件内容不一致。')
+    coverContentType = contentType
   }
 
   return {
@@ -162,6 +183,7 @@ function validateImport(body) {
     version,
     isPublic,
     coverBytes,
+    coverContentType,
   }
 }
 
@@ -184,7 +206,11 @@ async function importRecord(user, body) {
       return { imported: false, already_exists: true }
     }
     if (record.coverBytes)
-      savedCover = await saveImportedCover(user.id, record.coverBytes)
+      savedCover = await saveImportedCover(
+        user.id,
+        record.coverBytes,
+        record.coverContentType,
+      )
     const { rows } = await client.query(
       `INSERT INTO records (
          id, user_id, title, tags, content, cover_path, created_at, updated_at,
@@ -243,7 +269,10 @@ function validateMutation(body, user) {
     content = body.content
     coverPath = body.coverPath ?? null
     if (coverPath !== null) {
-      const pathPattern = new RegExp(`^${user.id}/[0-9a-f-]{36}\\.webp$`, 'i')
+      const pathPattern = new RegExp(
+        `^${user.id}/[0-9a-f-]{36}\\.(?:webp|jpe?g|png)$`,
+        'i',
+      )
       if (typeof coverPath !== 'string' || !pathPattern.test(coverPath))
         throw httpError(400, '封面路径无效。')
     }
