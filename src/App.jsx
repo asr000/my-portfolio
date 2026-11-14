@@ -179,7 +179,7 @@ function Pages() {
 
         <section id="contact">
           <h2>联系我</h2>
-          <p>QQ群:902722762</p>
+          <p>QQ群:1129774429</p>
         </section>
       </main>
     </div>
