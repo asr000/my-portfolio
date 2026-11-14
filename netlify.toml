@@ -4,7 +4,7 @@
 
 [[redirects]]
   from = "/api/*"
-  to = "https://pub.lonnet.uk/api/:splat"
+  to = "https://api.ars000.top/api/:splat"
   status = 200
   force = true
 
