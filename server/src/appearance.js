@@ -123,6 +123,15 @@ async function serveImage(response, row, kind, isPublic) {
   response.end(bytes)
 }
 
+async function removeStoredImage(path) {
+  if (!path) return
+  try {
+    await unlink(safeFile(path)).catch(() => {})
+  } catch {
+    // A stale or invalid old path must not prevent the replacement from saving.
+  }
+}
+
 async function uploadImage(request, response, user, kind) {
   const contentType = String(request.headers['content-type'] || '')
     .toLowerCase()
@@ -153,7 +162,7 @@ async function uploadImage(request, response, user, kind) {
       [user.id, imagePath, contentType],
     )
     if (oldPath && oldPath !== imagePath)
-      await unlink(safeFile(oldPath)).catch(() => {})
+      await removeStoredImage(oldPath)
     const settings = serialize(rows[0])
     sendJson(response, 201, { ...settings, uploaded: kind })
   } catch (error) {
@@ -213,7 +222,7 @@ async function removeImage(response, user, kind) {
        SET ${pathColumn} = NULL, ${typeColumn} = NULL, updated_at = now()`,
     [user.id],
   )
-  if (oldPath) await unlink(safeFile(oldPath)).catch(() => {})
+  await removeStoredImage(oldPath)
   sendJson(response, 200, { ok: true })
 }
 
