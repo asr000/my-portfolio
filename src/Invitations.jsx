@@ -11,6 +11,7 @@ import {
 import { errorText, formatDate } from './lib/recordUtils.js'
 import RecordsLayout, { RecordsAccess } from './RecordsLayout.jsx'
 import { NoteAccessMessage } from './NoteAccess.jsx'
+import HelpHint from './HelpHint.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
 
 export default function Invitations({ manage }) {
@@ -82,9 +83,9 @@ function ActivationForm() {
     )
   return (
     <form className="record-fields auth-form" onSubmit={redeem}>
-      <p className="helper">
+      <HelpHint align="start">
         每个邀请码仅供一个账号兑换。兑换成功后，笔记和封面只属于你的账号。
-      </p>
+      </HelpHint>
       <label htmlFor="invite-code">邀请码</label>
       <input
         id="invite-code"
@@ -261,10 +262,10 @@ function InvitationManager() {
               value={issued.code}
               onFocus={(e) => e.target.select()}
             />
-            <small>
+            <HelpHint align="start">
               截至 {formatDate(issued.expires_at)}{' '}
               可兑换。请先复制；离开页面后不再显示原码。
-            </small>
+            </HelpHint>
             <button onClick={copy} disabled={busy}>
               复制邀请码
             </button>

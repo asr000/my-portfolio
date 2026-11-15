@@ -26,10 +26,24 @@ import { inlineImagePaths } from './lib/backupFormat.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
 import { listReturn, loginLink, recordLink } from './lib/navigation.js'
 import PageTopbar from './PageTopbar.jsx'
+import { useAuth } from './lib/authContext.js'
+import HelpHint from './HelpHint.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
+const pendingRecordLoads = new Map()
+
+function getRecordOnce(recordId) {
+  const pending = pendingRecordLoads.get(recordId)
+  if (pending) return pending
+  const request = getRecord(recordId).finally(() => {
+    pendingRecordLoads.delete(recordId)
+  })
+  pendingRecordLoads.set(recordId, request)
+  return request
+}
 
 export default function RecordEditor({ recordId }) {
+  const auth = useAuth()
   const [loaded, setLoaded] = useState(null)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
@@ -37,12 +51,12 @@ export default function RecordEditor({ recordId }) {
     let active = true
     async function load() {
       try {
-        const user = await currentUser()
+        const user = auth.user
         if (!user) {
           if (active) setLoaded({ signedOut: true })
           return
         }
-        const record = recordId ? await getRecord(recordId) : null
+        const record = recordId ? await getRecordOnce(recordId) : null
         if (recordId && (!record || record.deleted_at))
           throw new Error('记录不存在或已移入回收站。')
         if (active)
@@ -59,7 +73,7 @@ export default function RecordEditor({ recordId }) {
     return () => {
       active = false
     }
-  }, [recordId, attempt])
+  }, [auth.user?.id, recordId, attempt])
   const returnTo = listReturn(
     new URLSearchParams(window.location.search).get('back'),
   )
@@ -509,12 +523,14 @@ function EditorForm({ user, record, draft, back }) {
         }}
       />
       <div className="record-editor">
-        <h1>{record ? '编辑记录' : '新增记录'}</h1>
-        <p className="helper">
-          {record?.is_public
-            ? '这条记录已公开，保存的修改也会更新公开内容。'
-            : '记录默认仅自己可见。保存后可在记录管理页选择公开展示。'}
-        </p>
+        <div className="record-editor-heading">
+          <h1>{record ? '编辑记录' : '新增记录'}</h1>
+          <HelpHint align="start">
+            {record?.is_public
+              ? '这条记录已公开，保存的修改也会更新公开内容。'
+              : '记录默认仅自己可见。保存后可在记录管理页选择公开展示。'}
+          </HelpHint>
+        </div>
         {candidate && (
           <aside className="notice">
             <p>
@@ -540,9 +556,10 @@ function EditorForm({ user, record, draft, back }) {
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
-          <label htmlFor="record-tags">
-            标签 <small>中英文逗号分隔，最多 12 个</small>
-          </label>
+          <div className="record-field-heading">
+            <label htmlFor="record-tags">标签</label>
+            <HelpHint>中英文逗号分隔，最多 12 个。</HelpHint>
+          </div>
           <input
             id="record-tags"
             name="tags"
@@ -550,7 +567,14 @@ function EditorForm({ user, record, draft, back }) {
             value={form.tags}
             onChange={(e) => setForm({ ...form, tags: e.target.value })}
           />
-          <label htmlFor="record-content">详细内容</label>
+          <div className="record-field-heading">
+            <label htmlFor="record-content">详细内容</label>
+            <HelpHint align="start">
+              支持 Markdown 和数学公式：行内公式用 <code>$x^2$</code>，独立公式用两个单独成行的 <code>$$</code> 包围。切换到预览查看效果。
+              {' '}需要更多示例可打开{' '}
+              <a href="/?view=markdown-help" target="_blank" rel="noopener noreferrer">写作说明</a>。
+            </HelpHint>
+          </div>
           <div className="content-mode" role="group" aria-label="正文显示模式">
             <button
               type="button"
@@ -573,14 +597,6 @@ function EditorForm({ user, record, draft, back }) {
             >
               插入图片
             </button>
-            <a
-              className="text-link"
-              href="/?view=markdown-help"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              写作说明 ↗
-            </a>
           </div>
           <input
             ref={inlineImageInput}
@@ -590,14 +606,10 @@ function EditorForm({ user, record, draft, back }) {
             disabled={disabled || imageBusy}
             onChange={chooseInlineImage}
           />
-          <small id="record-content-help">
-            支持 Markdown 和数学公式：行内用 <code>$x^2$</code>，独立公式用两个单独成行的 <code>$$</code> 包围。切换到预览查看效果。
-          </small>
           <textarea
             ref={contentInput}
             id="record-content"
             name="content"
-            aria-describedby="record-content-help"
             rows={10}
             maxLength={100000}
             disabled={disabled || imageBusy}
@@ -616,7 +628,12 @@ function EditorForm({ user, record, draft, back }) {
               )}
             </div>
           )}
-          <label htmlFor="record-cover">封面（可选）</label>
+          <div className="record-field-heading">
+            <label htmlFor="record-cover">封面（可选）</label>
+            <HelpHint align="start">
+              JPEG、PNG、WebP，原图最大 20 MB；自动缩小并压缩至 5 MB 以内。插入正文的图片会上传到笔记服务器并写入 Markdown，ZIP 备份也会包含这些图片。
+            </HelpHint>
+          </div>
           <input
             ref={input}
             id="record-cover"
@@ -625,10 +642,6 @@ function EditorForm({ user, record, draft, back }) {
             disabled={disabled || imageBusy}
             onChange={chooseCover}
           />
-          <small>
-            JPEG、PNG、WebP，原图不超过 5 MB；自动缩小至最长边 1600 像素并压缩。
-          </small>
-          <small>插入图片后会上传到笔记服务器，写进正文的 Markdown；ZIP 备份会包含这些图片。</small>
           {imageBusy && <p role="status">正在处理图片…</p>}
           {preview ? (
             <img className="cover-preview" src={preview} alt="将保存的封面" />
@@ -670,9 +683,9 @@ function EditorForm({ user, record, draft, back }) {
             {message}
           </p>
           <small role="status">{draftMessage}</small>
-          <small>
+          <HelpHint align="start">
             草稿仅保存在当前设备浏览器中，按账号隔离；不会同步到其他设备。
-          </small>
+          </HelpHint>
         </form>
       </div>
     </main>

@@ -171,7 +171,7 @@ export async function getAuthenticatedUser(request) {
   const token = cookieValue(request)
   if (!/^[0-9a-f]{64}$/i.test(token)) return null
   const { rows } = await pool.query(
-    `SELECT u.id, u.email, u.email_verified_at
+    `SELECT u.id, u.email, u.email_verified_at, u.is_author
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = $1 AND s.expires_at > now()`,
     [hashToken(token)],
@@ -377,6 +377,7 @@ export async function handleAuthRoute(request, response, url) {
               id: user.id,
               email: user.email,
               email_confirmed_at: user.email_verified_at,
+              is_author: user.is_author,
             }
           : null,
       })
@@ -403,7 +404,7 @@ export async function handleAuthRoute(request, response, url) {
       if (!validEmail(email) || typeof body.password !== 'string')
         throw httpError(401, '邮箱或密码不正确。')
       const { rows } = await pool.query(
-        `SELECT id, email, password_hash, email_verified_at
+        `SELECT id, email, password_hash, email_verified_at, is_author
          FROM users WHERE lower(btrim(email)) = $1 LIMIT 1`,
         [email],
       )
@@ -418,6 +419,7 @@ export async function handleAuthRoute(request, response, url) {
           id: user.id,
           email: user.email,
           email_confirmed_at: user.email_verified_at,
+          is_author: user.is_author,
         },
       })
       return true

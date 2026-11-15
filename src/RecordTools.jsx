@@ -3,6 +3,7 @@ import { cleanupFiles } from './lib/recordsApi.js'
 import { errorText } from './lib/recordUtils.js'
 import RecordsLayout, { RecordsAccess } from './RecordsLayout.jsx'
 import RecordsList from './RecordsList.jsx'
+import HelpHint from './HelpHint.jsx'
 
 export default function RecordTools() {
   return (
@@ -13,27 +14,24 @@ export default function RecordTools() {
       <RecordsAccess>
         {() => (
           <nav className="management-links" aria-label="管理功能">
-            <a className="management-link" href="/?view=backup">
-              <span>
-                <strong>数据备份</strong>
-                <small>导出记录文字，或打包记录与封面。</small>
-              </span>
-              <span aria-hidden="true">→</span>
-            </a>
-            <a className="management-link" href="/?view=trash">
-              <span>
-                <strong>回收站</strong>
-                <small>查看已删除的记录，恢复或彻底删除。</small>
-              </span>
-              <span aria-hidden="true">→</span>
-            </a>
-            <a className="management-link" href="/?view=storage">
-              <span>
-                <strong>封面清理</strong>
-                <small>重试清理替换或删除后不再使用的封面。</small>
-              </span>
-              <span aria-hidden="true">→</span>
-            </a>
+            <div className="management-link-row">
+              <a className="management-link" href="/?view=backup">
+                <strong>数据备份</strong><span aria-hidden="true">→</span>
+              </a>
+              <HelpHint>导出记录文字，或打包记录与封面。</HelpHint>
+            </div>
+            <div className="management-link-row">
+              <a className="management-link" href="/?view=trash">
+                <strong>回收站</strong><span aria-hidden="true">→</span>
+              </a>
+              <HelpHint>查看已删除的记录，恢复或彻底删除。</HelpHint>
+            </div>
+            <div className="management-link-row">
+              <a className="management-link" href="/?view=storage">
+                <strong>封面清理</strong><span aria-hidden="true">→</span>
+              </a>
+              <HelpHint>重试清理替换或删除后不再使用的封面。</HelpHint>
+            </div>
           </nav>
         )}
       </RecordsAccess>
@@ -90,13 +88,12 @@ function CleanupForm({ user }) {
   }
   return (
     <div className="maintenance-panel">
-      <h2>清理不再使用的图片</h2>
-      <p>
-        保存记录时会自动尝试清理旧封面。遇到断网或权限问题后，可以在这里重试。
-      </p>
-      <p className="helper">
-        当前记录和回收站仍在使用的封面会保留。待清理队列来自当前浏览器。
-      </p>
+      <div className="cleanup-heading">
+        <h2>清理不再使用的图片</h2>
+        <HelpHint align="start">
+          保存记录时会自动尝试清理旧封面。遇到断网或权限问题后，可以在这里重试。当前记录和回收站仍在使用的封面会保留。待清理队列来自当前浏览器。
+        </HelpHint>
+      </div>
       <button disabled={busy} onClick={clean}>
         {busy ? '正在清理…' : '重试清理旧封面'}
       </button>

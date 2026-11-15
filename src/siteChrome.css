@@ -1,0 +1,295 @@
+.orbit-nav {
+  position: fixed;
+  z-index: 1200;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  display: block;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  transition: width 360ms cubic-bezier(.2,.8,.2,1), height 360ms ease,
+    border-radius 360ms ease, background-color 240ms ease, box-shadow 240ms ease;
+}
+.orbit-nav.is-open {
+  width: min(430px, calc(100vw - 32px));
+  height: 132px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--surface-input) 84%, transparent);
+  box-shadow: 0 18px 60px #382a332e;
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+.orbit-avatar {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, white);
+  border-radius: 50%;
+  background: var(--surface-input);
+  box-shadow: 0 8px 28px #382a3338;
+  transition: transform 360ms cubic-bezier(.2,.8,.2,1), border-radius 360ms ease;
+}
+.orbit-avatar:hover {
+  transform: rotate(-8deg) scale(1.04);
+}
+.orbit-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.orbit-nav.is-open .orbit-avatar {
+  top: 30px;
+  left: 9px;
+  width: 66px;
+  height: 66px;
+}
+.orbit-links {
+  position: absolute;
+  top: 8px;
+  right: 52px;
+  bottom: 8px;
+  left: 86px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 4px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 180ms ease 90ms, transform 260ms ease;
+  transform: translateX(-8px);
+}
+.orbit-nav.is-open .orbit-links {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+.orbit-links a {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 2px;
+  border-radius: 14px;
+  color: var(--text-strong);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 180ms ease, color 180ms ease, transform 180ms ease;
+}
+.orbit-links a:hover,
+.orbit-links a:focus-visible {
+  background: var(--surface-hover);
+  color: var(--accent);
+  transform: translateY(-2px);
+}
+.orbit-links a span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+.orbit-links a small {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.orbit-settings {
+  position: absolute;
+  z-index: 3;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-panel);
+  color: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(.8);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.orbit-nav.is-open .orbit-settings {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+.orbit-settings svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.appearance-dialog {
+  position: fixed;
+  width: min(420px, calc(100vw - 28px));
+  max-height: min(640px, calc(100dvh - 32px));
+  overflow: auto;
+  padding: 30px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface-panel);
+  color: var(--text);
+  box-shadow: 0 24px 80px #20172244;
+}
+.appearance-dialog::backdrop {
+  background: #17131b77;
+  backdrop-filter: blur(5px);
+}
+.appearance-dialog h2 {
+  margin: 0 44px 22px 0;
+  color: var(--text-strong);
+  font-size: 22px;
+}
+.appearance-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  font-size: 24px;
+}
+.appearance-upload {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 22px;
+  border: 1px dashed var(--control-border);
+  border-radius: 14px;
+  background: var(--surface-input);
+  color: var(--text-strong);
+  cursor: pointer;
+}
+.appearance-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.appearance-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.appearance-avatar-row > img {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  object-fit: cover;
+}
+.appearance-avatar-upload {
+  min-height: 42px;
+  flex: 1;
+  margin: 0;
+  border-style: solid;
+  font-size: 14px;
+}
+.appearance-avatar-row > button {
+  min-height: 42px;
+  padding: 0 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.appearance-range {
+  display: grid;
+  gap: 7px;
+  margin: 18px 0;
+  color: var(--text-strong);
+  font-size: 14px;
+}
+.appearance-range span {
+  display: flex;
+  justify-content: space-between;
+}
+.appearance-range output {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.appearance-range input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.appearance-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+}
+.appearance-message {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
+@media (max-width: 480px) {
+  .orbit-nav {
+    left: max(12px, env(safe-area-inset-left));
+    bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .orbit-nav.is-open {
+    width: min(430px, calc(100vw - 24px));
+    height: 142px;
+    border-radius: 25px;
+  }
+  .orbit-nav.is-open .orbit-avatar {
+    top: 38px;
+    left: 7px;
+    width: 60px;
+    height: 60px;
+  }
+  .orbit-links {
+    top: 8px;
+    right: 43px;
+    bottom: 8px;
+    left: 70px;
+    gap: 2px;
+  }
+  .orbit-links a span {
+    font-size: 12px;
+  }
+  .orbit-links a small {
+    font-size: 9px;
+  }
+  .orbit-settings {
+    width: 30px;
+    height: 30px;
+    top: 5px;
+    right: 5px;
+  }
+  .appearance-dialog {
+    padding: 26px 20px 22px;
+  }
+}

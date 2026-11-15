@@ -7,6 +7,7 @@ import { AuthNotice } from './AuthAccess.jsx'
 import { useNoteAccess } from './lib/useNoteAccess.js'
 import { NoteAccessMessage } from './NoteAccess.jsx'
 import NoteProfile from './NoteProfile.jsx'
+import HelpHint from './HelpHint.jsx'
 
 export default function Account() {
   const auth = useAuth()
@@ -41,9 +42,9 @@ export default function Account() {
         <div className="maintenance-panel">
           <h2>当前登录账号</h2>
           <p className="account-email">{auth.user.email || '已登录'}</p>
-          <p className="helper">
+          <HelpHint align="start">
             同一账号在手机和电脑登录后，可以查看同一份云端记录。退出只影响当前设备。
-          </p>
+          </HelpHint>
           <p>
             邮箱状态：
             {access.data

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiGet, apiPut } from './lib/apiClient.js'
 import { errorText } from './lib/recordUtils.js'
+import HelpHint from './HelpHint.jsx'
 
 export default function NoteProfile() {
   const [name, setName] = useState('')
@@ -48,9 +49,9 @@ export default function NoteProfile() {
   return (
     <section className="note-profile-panel" aria-label="公开笔记昵称设置">
       <h2>笔记来源昵称</h2>
-      <p className="helper">
+      <HelpHint align="start">
         昵称会显示在你公开的笔记列表和详情页，私密笔记仍只对自己可见。
-      </p>
+      </HelpHint>
       {loading ? (
         <p role="status">正在读取昵称…</p>
       ) : (

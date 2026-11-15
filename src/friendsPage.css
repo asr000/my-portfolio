@@ -1,0 +1,285 @@
+.friends-page {
+  align-items: center;
+  gap: 0;
+  background: color-mix(in srgb, var(--page-bg) 46%, transparent);
+}
+.friends-content {
+  width: min(100%, 940px);
+  margin: 30px auto 72px;
+  text-align: left;
+}
+.friends-heading {
+  margin: 14px 0 30px;
+}
+.friends-eyebrow,
+.friends-section-label {
+  display: inline-block;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .16em;
+}
+.friends-heading h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(34px, 6vw, 52px);
+  letter-spacing: -.04em;
+}
+.friends-heading h1 span {
+  color: var(--text-muted);
+  font-size: .66em;
+  font-weight: 500;
+}
+.friends-heading > .help-hint,
+.friends-profile-copy > .help-hint {
+  display: flex;
+  width: fit-content;
+  margin: 0 0 14px -6px;
+}
+.friends-page .friends-profile {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 26px;
+  overflow: visible;
+  padding: clamp(24px, 3vw, 36px);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 94% 3%, color-mix(in srgb, var(--selection-bg) 74%, transparent), transparent 38%),
+    color-mix(in srgb, var(--surface-panel) 91%, transparent);
+  box-shadow: 0 16px 42px #382a3310;
+}
+.friends-profile-copy h2,
+.friends-directory h2 {
+  margin: 7px 0 6px;
+  font-size: 24px;
+}
+.friends-profile-copy > p {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.friends-profile pre {
+  overflow-x: auto;
+  margin: 0 0 16px;
+  padding: 15px 17px;
+  border: 1px solid var(--divider);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--surface-input) 82%, transparent);
+  color: var(--text-strong);
+  font: 13px/1.75 Consolas, 'SFMono-Regular', monospace;
+  white-space: pre;
+}
+.friends-profile button {
+  padding: 9px 15px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.friends-profile button:hover {
+  background: var(--button-hover);
+}
+.friends-profile .friends-copy-message {
+  display: inline-block;
+  margin: 0 0 0 12px;
+  font-size: 13px;
+}
+.friends-profile-mark {
+  position: relative;
+  display: grid;
+  width: 148px;
+  height: 148px;
+  align-self: center;
+  justify-self: center;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface-input) 68%, transparent);
+  box-shadow: 0 12px 32px #382a3314;
+  transform: rotate(7deg);
+}
+.friends-profile-mark img {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.friends-profile-mark span {
+  position: absolute;
+  right: -1px;
+  bottom: 8px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 2px solid var(--surface-panel);
+  border-radius: 50%;
+  background: var(--selection-bg);
+  color: var(--text-strong);
+  font-weight: 750;
+  transform: rotate(-7deg);
+}
+.friends-page .friends-directory {
+  margin-top: 32px;
+  padding: 28px 0 0;
+  border-top: 1px solid var(--divider);
+}
+.friends-directory-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.friends-search {
+  display: flex;
+  width: min(100%, 320px);
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-input) 85%, transparent);
+  color: var(--text-muted);
+}
+.friends-search svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+.friends-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 14px;
+}
+.friends-search input::placeholder {
+  color: var(--placeholder);
+}
+.friends-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.friend-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+  padding: 17px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+  color: var(--text);
+  text-decoration: none;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.friend-card:hover,
+.friend-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 12px 30px #382a3315;
+  transform: translateY(-2px);
+}
+.friend-card-avatar {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--divider);
+  border-radius: 50%;
+  background: var(--quote-bg);
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 700;
+}
+.friend-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.friend-card-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.friend-card-copy strong,
+.friend-card-copy span,
+.friend-card-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.friend-card-copy strong {
+  color: var(--text-strong);
+  font-size: 16px;
+}
+.friend-card-copy span,
+.friend-card-copy small {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.friend-card-arrow {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 20px;
+}
+.friends-empty {
+  display: grid;
+  min-height: 180px;
+  justify-items: center;
+  align-content: center;
+  gap: 8px;
+  border: 1px dashed var(--control-border);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface-panel) 55%, transparent);
+  color: var(--text-muted);
+  text-align: center;
+}
+.friends-empty-icon {
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 28px;
+}
+.friends-empty strong {
+  color: var(--text-strong);
+  font-size: 16px;
+}
+.friends-empty span:last-child {
+  font-size: 13px;
+}
+@media (max-width: 650px) {
+  .friends-content {
+    margin-top: 18px;
+  }
+  .friends-page .friends-profile {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+  .friends-profile-mark {
+    display: none;
+  }
+  .friends-directory-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .friends-search {
+    width: 100%;
+  }
+  .friends-grid {
+    grid-template-columns: 1fr;
+  }
+}

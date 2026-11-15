@@ -11,6 +11,7 @@ import {
 } from './lib/authCallback.js'
 import { AuthNotice } from './AuthAccess.jsx'
 import RecordsLayout from './RecordsLayout.jsx'
+import HelpHint from './HelpHint.jsx'
 
 export default function AuthPages({ view }) {
   if (view === 'register') return <Register />
@@ -315,18 +316,18 @@ export function ResetPassword() {
         </div>
       ) : initialAuthCallback.token ? (
         <form className="record-fields auth-form" onSubmit={submit}>
-          <p className="helper">请设置新密码。</p>
+          <HelpHint align="start">请设置新密码。</HelpHint>
           <PasswordFields disabled={busy} />
           <button disabled={busy}>{busy ? '正在更新…' : '更新密码'}</button>
           {message && <p role="alert">{message}</p>}
         </form>
       ) : (
         <div>
-          <p className="helper">
+          <HelpHint align="start">
             {initialAuthCallback.failed
               ? '重置链接无效或已过期，请重新获取邮件。'
               : '请先获取重置邮件，再打开邮件中的链接设置新密码。'}
-          </p>
+          </HelpHint>
           <a className="text-link" href="/?view=forgot-password">
             重新获取重置邮件 →
           </a>

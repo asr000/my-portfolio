@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPost } from './apiClient.js'
+import { fetchWithTimeout } from './http.js'
 import { readLocal, writeLocal } from './localData.js'
 
 export async function currentUser() {
@@ -87,16 +88,33 @@ export async function cleanupFiles(userId) {
 }
 
 export async function uploadCover(path, file, signal) {
-  const response = await fetch('/api/covers', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': file.type,
-      'X-Cover-Path': path,
-    },
-    body: file,
-    signal,
-  })
+  let response
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await fetchWithTimeout('/api/covers', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': file.type,
+          'X-Cover-Path': path,
+        },
+        body: file,
+        signal,
+      })
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason || error
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 450))
+        continue
+      }
+      throw new Error('图片上传连接中断或超时，请检查网络后重试。')
+    }
+
+    if (response.ok || ![408, 425, 429, 500, 502, 503, 504].includes(response.status))
+      break
+    if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 450))
+  }
+
   const text = await response.text()
   let payload
   try {
@@ -136,42 +154,109 @@ export async function downloadCover(path, signal) {
   return response.blob()
 }
 
+async function coverSourceType(file) {
+  const accepted = new Set(['image/jpeg', 'image/png', 'image/webp'])
+  const declared = String(file.type || '').toLowerCase()
+  const normalized = declared === 'image/jpg' ? 'image/jpeg' : declared
+  if (accepted.has(normalized)) return normalized
+
+  const extension = String(file.name || '').split('.').pop().toLowerCase()
+  const byExtension = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+  }
+  if (byExtension[extension]) return byExtension[extension]
+
+  const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer())
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    return 'image/jpeg'
+  if (bytes.length >= 8 &&
+    bytes.subarray(0, 8).join(',') === '137,80,78,71,13,10,26,10')
+    return 'image/png'
+  if (bytes.length >= 12 &&
+    String.fromCharCode(...bytes.subarray(0, 4)) === 'RIFF' &&
+    String.fromCharCode(...bytes.subarray(8, 12)) === 'WEBP')
+    return 'image/webp'
+  throw new Error('请选择有效的 JPEG、PNG 或 WebP 图片。')
+}
+
 export async function prepareCover(file) {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
-    throw new Error('请选择 JPEG、PNG 或 WebP 图片。')
-  if (file.size > 5 * 1024 * 1024) throw new Error('原图不能超过 5 MB。')
-  const bitmap = await createImageBitmap(file)
+  if (file.size > 20 * 1024 * 1024)
+    throw new Error('原图不能超过 20 MB。')
+  const sourceType = await coverSourceType(file)
+  let source
+  let width
+  let height
+  let cleanup = () => {}
+  if (typeof createImageBitmap === 'function') {
+    try {
+      source = await createImageBitmap(file)
+      width = source.width
+      height = source.height
+      cleanup = () => source.close()
+    } catch {
+      // Some Safari/image-decoder combinations cannot create an ImageBitmap;
+      // retry decoding through a regular image element before failing.
+    }
+  }
+  if (!source) {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+    try {
+      await new Promise((resolve, reject) => {
+        image.onload = resolve
+        image.onerror = () => reject(new Error('图片无法解码。'))
+        image.src = objectUrl
+      })
+      source = image
+      width = image.naturalWidth
+      height = image.naturalHeight
+      cleanup = () => URL.revokeObjectURL(objectUrl)
+    } catch {
+      URL.revokeObjectURL(objectUrl)
+      throw new Error('无法读取这张图片，请换用 JPEG、PNG 或 WebP 图片。')
+    }
+  }
   try {
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    const makeCanvas = (maxEdge) => {
+      const scale = Math.min(1, maxEdge / Math.max(width, height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(width * scale))
+      canvas.height = Math.max(1, Math.round(height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('当前浏览器无法处理图片。')
+      context.drawImage(source, 0, 0, canvas.width, canvas.height)
+      return canvas
+    }
+    const initialCanvas = makeCanvas(1600)
     const webp = await new Promise((resolve) =>
-      canvas.toBlob(resolve, 'image/webp', 0.82),
+      initialCanvas.toBlob(resolve, 'image/webp', 0.82),
     )
     if (webp?.type === 'image/webp' && webp.size <= 5 * 1024 * 1024)
       return new File([webp], 'cover.webp', { type: webp.type })
 
-    // Some browsers display WebP but cannot encode it with canvas.toBlob.
-    // Keep JPEGs as JPEGs and preserve transparency for PNG/WebP inputs.
-    const fallbackType = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png'
-    const fallback = await new Promise((resolve) =>
-      canvas.toBlob(
-        resolve,
-        fallbackType,
-        fallbackType === 'image/jpeg' ? 0.82 : undefined,
-      ),
-    )
-    if (!fallback || fallback.type !== fallbackType)
-      throw new Error('当前浏览器无法处理这张封面，请用 Chrome 重试。')
-    if (fallback.size > 5 * 1024 * 1024)
-      throw new Error('封面处理后仍超过 5 MB，请换用较小的图片。')
-
-    const extension = fallbackType === 'image/jpeg' ? 'jpg' : 'png'
-    return new File([fallback], `cover.${extension}`, { type: fallbackType })
+    // WebP encoding is missing in some Safari versions. Keep transparency for
+    // PNG/WebP sources and progressively shrink until the server limit is met.
+    const fallbackType = sourceType === 'image/jpeg' ? 'image/jpeg' : 'image/png'
+    for (const maxEdge of [1600, 1400, 1200, 1000, 800]) {
+      const canvas = makeCanvas(maxEdge)
+      const encoded = await new Promise((resolve) =>
+        canvas.toBlob(
+          resolve,
+          fallbackType,
+          fallbackType === 'image/jpeg' ? 0.82 : undefined,
+        ),
+      )
+      if (encoded?.type === fallbackType && encoded.size <= 5 * 1024 * 1024) {
+        const extension = fallbackType === 'image/jpeg' ? 'jpg' : 'png'
+        return new File([encoded], `cover.${extension}`, { type: fallbackType })
+      }
+    }
+    throw new Error('图片压缩后仍超过 5 MB，请换一张较小的图片。')
   } finally {
-    bitmap.close()
+    cleanup()
   }
 }
 

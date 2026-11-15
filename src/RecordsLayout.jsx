@@ -3,6 +3,7 @@ import { useAuth } from './lib/authContext.js'
 import { AuthNotice } from './AuthAccess.jsx'
 import { loginLink } from './lib/navigation.js'
 import PageTopbar from './PageTopbar.jsx'
+import HelpHint from './HelpHint.jsx'
 
 export default function RecordsLayout({
   title,
@@ -41,7 +42,11 @@ export default function RecordsLayout({
         <header className="records-page-heading">
           <p className="page-eyebrow">Re:代码生活 / 项目记录</p>
           <h1>{title}</h1>
-          <p className="page-description">{description}</p>
+          {description && (
+            <div className="records-page-description">
+              <HelpHint align="start">{description}</HelpHint>
+            </div>
+          )}
         </header>
         {notice && (
           <p className="notice" role="status">

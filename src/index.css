@@ -22,10 +22,28 @@
 body {
   margin: 0;
   min-width: 320px;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  inset: -14px;
+  background-image: var(--wallpaper-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: var(--wallpaper-opacity, 0);
+  filter: blur(var(--wallpaper-blur, 0px));
+  pointer-events: none;
+  transition: opacity 280ms ease, filter 280ms ease;
 }
 
 /* React 页面挂载的容器 */
 #root {
+  position: relative;
+  z-index: 1;
   width: 100%;
   min-height: 100vh;
   width: 100%;

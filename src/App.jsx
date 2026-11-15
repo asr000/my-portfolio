@@ -17,6 +17,9 @@ import Account from './Account.jsx'
 import PublicRecord from './PublicRecord.jsx'
 import NoteWriteAccess from './NoteAccess.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
+import SiteChrome from './SiteChrome.jsx'
+import FriendsPage from './FriendsPage.jsx'
+import PaintingsPage from './PaintingsPage.jsx'
 
 const DataBackup = lazy(() => import('./DataBackup.jsx'))
 const MarkdownHelp = lazy(() => import('./MarkdownHelp.jsx'))
@@ -31,11 +34,7 @@ function Header() {
         Re:代码生活
       </a>
 
-      <nav aria-label="主导航">
-        <a href="#about">关于我</a>
-        <a href="/?view=showcase">练习</a>
-        <a href="#contact">联系我</a>
-        {auth.user && <a href="/?view=records">我的记录</a>}
+      <nav aria-label="账号和外观">
         <a href={auth.user ? '/?view=account' : loginLink('/')}>
           {auth.status === 'loading' ? '账号' : auth.user ? '我的账号' : '登录'}
         </a>
@@ -85,6 +84,8 @@ function Pages() {
 
   if (publicId !== null) return <PublicRecord recordId={publicId} />
   if (view === 'showcase') return <SearchRecords publicView />
+  if (view === 'friends') return <FriendsPage />
+  if (view === 'paintings') return <PaintingsPage />
 
   if (isLoggingIn) {
     return <Login />
@@ -186,10 +187,19 @@ function Pages() {
   )
 }
 
+function AppFrame() {
+  return (
+    <>
+      <Pages />
+      <SiteChrome />
+    </>
+  )
+}
+
 function App() {
   return (
     <AuthProvider>
-      <Pages />
+      <AppFrame />
     </AuthProvider>
   )
 }

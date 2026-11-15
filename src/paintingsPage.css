@@ -1,0 +1,440 @@
+.paintings-page {
+  min-height: 100vh;
+  align-items: center;
+  gap: 0;
+  padding: 24px clamp(18px, 5vw, 72px) 80px;
+  background: color-mix(in srgb, var(--page-bg) 46%, transparent);
+}
+
+.paintings-page .page-topbar,
+.paintings-content {
+  width: min(100%, 1080px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.paintings-content {
+  margin-top: 44px;
+}
+
+.paintings-heading {
+  margin: 0 0 28px;
+}
+
+.paintings-eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .17em;
+}
+
+.paintings-heading h1 {
+  margin: 9px 0 8px;
+  font-size: clamp(34px, 6vw, 54px);
+  letter-spacing: -.045em;
+}
+
+.paintings-heading h1 span {
+  color: var(--text-muted);
+  font-size: .62em;
+  font-weight: 500;
+}
+
+.paintings-heading > .help-hint {
+  display: flex;
+  width: fit-content;
+  margin: 0 0 14px -6px;
+}
+.painting-manager .help-hint {
+  display: flex;
+  width: fit-content;
+  margin: 2px 0 0 -6px;
+}
+
+.painting-manager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+}
+
+.painting-manager > div {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.painting-manager-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--selection-bg) 70%, transparent);
+  color: var(--accent);
+  font-size: 22px;
+}
+
+.painting-manager h2 {
+  margin: 0 0 3px;
+  color: var(--text-strong);
+  font-size: 16px;
+}
+
+.painting-manager p,
+.painting-upload-message,
+.painting-error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.painting-upload-button,
+.painting-empty button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.painting-upload-button:hover,
+.painting-empty button:hover {
+  background: var(--button-hover);
+  transform: translateY(-1px);
+}
+
+.painting-upload-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.painting-upload-button:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 3px;
+}
+
+.painting-upload-button:has(input:disabled) {
+  cursor: progress;
+  opacity: .68;
+}
+
+.painting-upload-message,
+.painting-error {
+  margin: 0 0 14px;
+  padding: 10px 13px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
+}
+
+.painting-error {
+  color: #a84455;
+}
+
+.painting-gallery {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  background: color-mix(in srgb, var(--surface-panel) 90%, transparent);
+  box-shadow: 0 18px 48px #382a3314;
+}
+
+.painting-stage {
+  position: relative;
+  overflow: hidden;
+  outline: none;
+  touch-action: pan-y pinch-zoom;
+}
+
+.painting-stage:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+
+.painting-track {
+  display: flex;
+  transition: transform 380ms cubic-bezier(.2, .7, .2, 1);
+  will-change: transform;
+}
+
+.painting-slide {
+  display: grid;
+  width: 100%;
+  flex: 0 0 100%;
+  margin: 0;
+}
+
+.painting-image-button {
+  position: relative;
+  display: grid;
+  min-height: clamp(280px, 58vw, 680px);
+  max-height: 72vh;
+  place-items: center;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--surface-input) 76%, transparent);
+  cursor: zoom-in;
+}
+
+.painting-image-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  user-select: none;
+}
+
+.painting-zoom-hint {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  padding: 7px 12px;
+  border: 1px solid #ffffff80;
+  border-radius: 999px;
+  background: #211b1db5;
+  color: white;
+  font-size: 12px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.painting-image-button:hover .painting-zoom-hint,
+.painting-image-button:focus-visible .painting-zoom-hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.painting-slide figcaption {
+  display: flex;
+  min-height: 61px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 20px;
+  color: var(--text-strong);
+}
+
+.painting-slide figcaption span {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.painting-slide figcaption small,
+.painting-controls > span,
+.painting-lightbox-controls span {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.painting-arrow {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid #ffffff90;
+  border-radius: 50%;
+  background: #211b1db5;
+  color: white;
+  font: inherit;
+  font-size: 25px;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.painting-arrow:hover {
+  background: #211b1de6;
+  transform: translateY(-50%) scale(1.05);
+}
+
+.painting-arrow.is-previous { left: 18px; }
+.painting-arrow.is-next { right: 18px; }
+
+.painting-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 15px 18px 18px;
+}
+
+.painting-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.painting-dots button {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--control-border);
+  cursor: pointer;
+  transition: width 180ms ease, background 180ms ease;
+}
+
+.painting-dots button.is-active {
+  width: 24px;
+  background: var(--accent);
+}
+
+.painting-dots button:focus-visible,
+.painting-arrow:focus-visible,
+.painting-lightbox button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.painting-empty {
+  display: grid;
+  min-height: 300px;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 28px;
+  border: 1px dashed var(--control-border);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-panel) 68%, transparent);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.painting-empty strong {
+  color: var(--text-strong);
+  font-size: 17px;
+}
+
+.painting-empty span:last-of-type {
+  max-width: 440px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.painting-empty-flower {
+  color: var(--accent);
+  font-size: 32px;
+}
+
+.painting-empty button {
+  margin-top: 6px;
+}
+
+.painting-lightbox {
+  width: min(96vw, 1400px);
+  max-width: none;
+  max-height: 94vh;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #ffffff30;
+  border-radius: 18px;
+  background: #161415f5;
+  color: white;
+  box-shadow: 0 24px 90px #0008;
+}
+
+.painting-lightbox::backdrop {
+  background: #171316d9;
+  backdrop-filter: blur(7px);
+}
+
+.painting-lightbox-toolbar {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 14px 8px 20px;
+  color: #fff;
+}
+
+.painting-lightbox-toolbar span {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.painting-lightbox button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #ffffff30;
+  border-radius: 50%;
+  background: #ffffff12;
+  color: white;
+  font: inherit;
+  font-size: 21px;
+  cursor: pointer;
+}
+
+.painting-lightbox > img {
+  display: block;
+  width: 100%;
+  max-height: calc(94vh - 112px);
+  object-fit: contain;
+}
+
+.painting-lightbox-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 8px 16px 12px;
+}
+
+.painting-lightbox-controls span { color: #ffffffaa; }
+
+@media (max-width: 600px) {
+  .paintings-page {
+    padding: 18px 14px 76px;
+  }
+
+  .paintings-content { margin-top: 32px; }
+  .painting-manager { align-items: flex-start; padding: 14px; }
+  .painting-manager > div { align-items: flex-start; }
+  .painting-manager-mark { width: 36px; height: 36px; }
+  .painting-upload-button { padding: 0 13px; white-space: nowrap; }
+  .painting-gallery { border-radius: 20px; }
+  .painting-image-button { min-height: 58vh; max-height: 68vh; }
+  .painting-image-button img { max-height: 68vh; }
+  .painting-arrow { width: 40px; height: 40px; font-size: 21px; }
+  .painting-arrow.is-previous { left: 10px; }
+  .painting-arrow.is-next { right: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .painting-track,
+  .painting-arrow,
+  .painting-dots button,
+  .painting-zoom-hint { transition: none; }
+}

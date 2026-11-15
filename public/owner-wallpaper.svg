@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" fill="none">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#f9e8ed"/>
+      <stop offset=".48" stop-color="#eee8fb"/>
+      <stop offset="1" stop-color="#e5f3f1"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop stop-color="#fffaf0" stop-opacity=".92"/>
+      <stop offset="1" stop-color="#fffaf0" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="68" height="68" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="3" r="1.2" fill="#9b7185" fill-opacity=".16"/>
+    </pattern>
+    <g id="flower" fill="#fff9ef" fill-opacity=".52" stroke="#8e6c91" stroke-opacity=".24" stroke-width="2">
+      <ellipse cx="0" cy="-27" rx="15" ry="31"/>
+      <ellipse cx="0" cy="-27" rx="15" ry="31" transform="rotate(45)"/>
+      <ellipse cx="0" cy="-27" rx="15" ry="31" transform="rotate(90)"/>
+      <ellipse cx="0" cy="-27" rx="15" ry="31" transform="rotate(135)"/>
+      <circle r="10" fill="#e6bf7c" fill-opacity=".65"/>
+    </g>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#paper)"/>
+  <rect width="1600" height="1000" fill="url(#grid)"/>
+  <circle cx="220" cy="220" r="360" fill="url(#glow)"/>
+  <circle cx="1390" cy="780" r="420" fill="url(#glow)"/>
+  <g opacity=".8">
+    <use href="#flower" x="160" y="210" transform="rotate(-14 160 210) scale(2.6)"/>
+    <use href="#flower" x="1370" y="250" transform="rotate(20 1370 250) scale(1.8)"/>
+    <use href="#flower" x="1210" y="790" transform="rotate(-22 1210 790) scale(2.4)"/>
+    <use href="#flower" x="380" y="820" transform="rotate(12 380 820) scale(1.7)"/>
+  </g>
+  <g stroke="#8e6c91" stroke-opacity=".22" stroke-width="3" stroke-linecap="round">
+    <path d="M0 510c145-90 220-87 320 0s190 98 304 16"/>
+    <path d="M1000 180c115 105 220 126 350 38s188-70 250-10"/>
+    <path d="M780 1000c80-132 187-184 326-158s232-8 316-92"/>
+  </g>
+  <g fill="#fff8ed" fill-opacity=".78">
+    <path d="m680 183 8 20 20 8-20 8-8 20-8-20-20-8 20-8z"/>
+    <path d="m1015 612 7 17 17 7-17 7-7 17-7-17-17-7 17-7z"/>
+    <path d="m454 515 6 14 14 6-14 6-6 14-6-14-14-6 14-6z"/>
+    <circle cx="840" cy="342" r="7"/>
+    <circle cx="112" cy="694" r="5"/>
+    <circle cx="1490" cy="505" r="6"/>
+  </g>
+</svg>

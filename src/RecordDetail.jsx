@@ -13,6 +13,7 @@ import { listReturn, loginLink, recordLink } from './lib/navigation.js'
 import { canWriteNotes } from './lib/recordsApi.js'
 import PublicRecord from './PublicRecord.jsx'
 import PageTopbar from './PageTopbar.jsx'
+import HelpHint from './HelpHint.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
@@ -242,11 +243,11 @@ export default function RecordDetail({ recordId, manage = false }) {
           </p>
           {manage ? (
             <>
-              <p className="helper">
+              <HelpHint align="start">
                 {record.deleted_at
                   ? '恢复后可继续编辑；彻底删除无法撤销。'
                   : '修改内容或封面，请进入编辑页面。暂时不需要的记录可以移入回收站。'}
-              </p>
+              </HelpHint>
               <div className="actions record-actions">
                 {!record.deleted_at ? (
                   <>
@@ -289,11 +290,11 @@ export default function RecordDetail({ recordId, manage = false }) {
               {!record.deleted_at && (
                 <section className="publication-settings" aria-label="公开设置">
                   <h2>公开展示</h2>
-                  <p className="helper">
+                  <HelpHint align="start">
                     {record.is_public
                       ? '当前已公开：访客无需登录即可阅读。后续保存的修改也会更新公开内容。'
                       : '当前仅自己可见。公开后，标题、标签、正文、封面和来源昵称会显示在首页与公开列表。'}
-                  </p>
+                  </HelpHint>
                   {publicationError ? (
                     <p role="alert">
                       公开设置暂不可用：{publicationError}{' '}
@@ -314,9 +315,9 @@ export default function RecordDetail({ recordId, manage = false }) {
                       {record.is_public ? '取消公开' : '公开展示'}
                     </button>
                   ) : (
-                    <p className="helper">
+                    <HelpHint align="start">
                       请先验证邮箱并兑换邀请码，再公开自己的笔记。
-                    </p>
+                    </HelpHint>
                   )}
                   {record.is_public && (
                     <div className="share-link-field">

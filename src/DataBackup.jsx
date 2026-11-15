@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import RecordsLayout, { RecordsAccess } from './RecordsLayout.jsx'
+import HelpHint from './HelpHint.jsx'
 import { createBackup } from './lib/backup.js'
 import { importBackup } from './lib/backupImport.js'
 import { errorText } from './lib/recordUtils.js'
@@ -154,10 +155,10 @@ function BackupForm({ user }) {
           />
           包含回收站中的记录
         </label>
-        <p className="helper">
+        <HelpHint align="start">
           读取全部云端记录，不受列表当前加载条数限制。未保存的本机草稿和正文引用的外部图片不包含在内。单次备份限
           50 MB。
-        </p>
+        </HelpHint>
         <div className="actions">
           <button type="submit" disabled={busy || importBusy}>
             {busy ? '正在准备…' : '生成备份'}
@@ -189,9 +190,10 @@ function BackupForm({ user }) {
       )}
       <hr />
       <h2>导入备份</h2>
-      <p className="helper">
+      <HelpHint align="start">
         选择以前从 Supabase 或本网站导出的 JSON/ZIP 文件。ZIP 可以还原封面；JSON 只含记录文字。导入仅新增记录，已有记录不会覆盖。
-      </p>
+        备份只属于其原账号邮箱。导入前请确认已登录对应邮箱，且已开通笔记记录权限。
+      </HelpHint>
       <form className="record-fields" onSubmit={importData}>
         <label htmlFor="backup-import-file">备份文件</label>
         <input
@@ -213,9 +215,6 @@ function BackupForm({ user }) {
       </form>
       {importMessage && <p role="status">{importMessage}</p>}
       {importError && <p role="alert">{importError}</p>}
-      <p className="helper">
-        备份只属于其原账号邮箱。导入前请确认已登录对应邮箱，且已开通笔记记录权限。
-      </p>
     </div>
   )
 }

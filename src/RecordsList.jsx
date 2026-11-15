@@ -7,6 +7,7 @@ import {
 import { listPublicRecords, listRecords } from './lib/recordsApi.js'
 import { recordLink } from './lib/navigation.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
+import HelpHint from './HelpHint.jsx'
 import RecordSource from './RecordSource.jsx'
 
 export default function RecordsList({
@@ -144,11 +145,13 @@ export default function RecordsList({
         ))}
       </div>
       {preview && !!records.length && (
-        <small className="scroll-hint">
+        <div className="scroll-hint">
+          <HelpHint align="center">
           {hasMore
             ? `已加载 ${records.length} 条 · 在记录框内向下滚动，自动加载更多`
             : `共 ${records.length} 条记录`}
-        </small>
+          </HelpHint>
+        </div>
       )}
       {busy && <p role="status">正在读取记录…</p>}
       {message && (
