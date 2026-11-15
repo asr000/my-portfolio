@@ -262,24 +262,60 @@
   font-size: 13px;
 }
 @media (max-width: 650px) {
+  .friends-page {
+    overflow-x: hidden;
+    padding-inline: 14px;
+  }
   .friends-content {
+    width: 100%;
     margin-top: 18px;
   }
+  .friends-heading {
+    margin: 8px 0 24px;
+  }
   .friends-page .friends-profile {
-    grid-template-columns: 1fr;
-    padding: 24px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    padding: 20px;
+    border-radius: 20px;
+  }
+  .friends-profile-copy {
+    min-width: 0;
+  }
+  .friends-profile pre {
+    max-width: 100%;
+    overflow-x: hidden;
+    padding: 12px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .friends-profile .friends-copy-message {
+    display: block;
+    margin: 10px 0 0;
   }
   .friends-profile-mark {
     display: none;
   }
+  .friends-page .friends-directory {
+    margin-top: 26px;
+    padding-top: 24px;
+  }
   .friends-directory-heading {
     align-items: stretch;
     flex-direction: column;
+    gap: 14px;
   }
   .friends-search {
     width: 100%;
+    min-height: 48px;
   }
   .friends-grid {
     grid-template-columns: 1fr;
+  }
+  .friend-card {
+    gap: 12px;
+    padding: 14px;
   }
 }

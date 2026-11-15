@@ -1,9 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from './lib/authContext.js'
-import { loadAppearance, saveAppearance } from './lib/appearanceStore.js'
+import {
+  loadAppearance,
+  removeAppearanceImage,
+  saveAppearance,
+  uploadAppearanceImage,
+} from './lib/appearanceStore.js'
 import './siteChrome.css'
 
-const defaultAppearance = { image: null, avatar: null, opacity: 0.3, clarity: 92 }
+const defaultUserAppearance = {
+  wallpaperUrl: null,
+  avatarUrl: null,
+  opacity: 0.3,
+  clarity: 92,
+  themeColor: null,
+}
+const defaultOwnerAppearance = {
+  ...defaultUserAppearance,
+  opacity: 0.28,
+  clarity: 88,
+}
+const defaultThemeColor = '#925063'
 
 async function prepareWallpaper(file) {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
@@ -58,11 +75,38 @@ async function prepareAvatar(file) {
   }
 }
 
+function fromServer(value, defaults) {
+  return {
+    ...defaults,
+    wallpaperUrl: value?.wallpaper_url || null,
+    avatarUrl: value?.avatar_url || null,
+    opacity: Number.isFinite(Number(value?.opacity)) ? Number(value.opacity) : defaults.opacity,
+    clarity: Number.isFinite(Number(value?.clarity)) ? Number(value.clarity) : defaults.clarity,
+    themeColor: value?.theme_color || null,
+  }
+}
+
 function applyWallpaper(url, opacity, clarity) {
   const style = document.documentElement.style
-  style.setProperty('--wallpaper-image', url ? 'url("' + url + '")' : 'none')
+  style.setProperty('--wallpaper-image', url ? `url("${url}")` : 'none')
   style.setProperty('--wallpaper-opacity', String(opacity))
-  style.setProperty('--wallpaper-blur', ((100 - clarity) * 0.08).toFixed(1) + 'px')
+  style.setProperty('--wallpaper-blur', `${((100 - clarity) * 0.08).toFixed(1)}px`)
+}
+
+function applyThemeColor(color) {
+  const style = document.documentElement.style
+  if (!color) {
+    for (const name of ['--accent', '--link', '--link-hover', '--nav-hover', '--focus', '--button-bg', '--button-hover'])
+      style.removeProperty(name)
+    return
+  }
+  style.setProperty('--accent', color)
+  style.setProperty('--link', color)
+  style.setProperty('--link-hover', `color-mix(in srgb, ${color} 78%, var(--text-strong))`)
+  style.setProperty('--nav-hover', `color-mix(in srgb, ${color} 78%, var(--text-strong))`)
+  style.setProperty('--focus', color)
+  style.setProperty('--button-bg', `color-mix(in srgb, ${color} 24%, var(--surface-panel))`)
+  style.setProperty('--button-hover', `color-mix(in srgb, ${color} 36%, var(--surface-panel))`)
 }
 
 const links = [
@@ -76,132 +120,150 @@ const links = [
 
 export default function SiteChrome() {
   const auth = useAuth()
+  const previewMode = import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get('appearancePreview') === '1'
   const [open, setOpen] = useState(false)
-  const [appearance, setAppearance] = useState(defaultAppearance)
+  const [appearance, setAppearance] = useState(defaultUserAppearance)
   const [loadedFor, setLoadedFor] = useState(null)
-  const [imageUrl, setImageUrl] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState('')
   const [message, setMessage] = useState('')
   const dialog = useRef(null)
+  const previewUrls = useRef([])
 
   useEffect(() => {
-    let active = true
+    if (previewMode) {
+      setAppearance(defaultUserAppearance)
+      setLoadedFor('preview')
+      return undefined
+    }
     if (auth.status === 'loading') {
       setLoadedFor(null)
-      setAppearance(defaultAppearance)
-      return () => { active = false }
-    }
-    if (!auth.user) {
-      setLoadedFor('anonymous')
-      setAppearance(defaultAppearance)
-      return () => { active = false }
+      setAppearance(defaultUserAppearance)
+      return undefined
     }
 
-    const userId = auth.user.id
+    const controller = new AbortController()
+    let active = true
+    const userId = auth.user?.id
+    const defaults = userId ? defaultUserAppearance : defaultOwnerAppearance
     setLoadedFor(null)
-    setAppearance(defaultAppearance)
-    loadAppearance(userId)
+    setAppearance(defaults)
+    loadAppearance({ publicView: !userId, signal: controller.signal })
       .then((saved) => {
         if (!active) return
-        setAppearance({
-          ...defaultAppearance,
-          ...saved,
-          image: saved?.image || null,
-        })
-        setLoadedFor(userId)
+        setAppearance(fromServer(saved, defaults))
+        setLoadedFor(userId || 'anonymous')
       })
       .catch((error) => {
-        if (!active) return
-        setMessage(error.message || '无法读取背景设置。')
-        setLoadedFor(userId)
+        if (!active || controller.signal.aborted) return
+        setAppearance(defaults)
+        setLoadedFor(userId || 'anonymous')
+        if (userId) setMessage(error.message || '无法读取主题设置。')
       })
-    return () => { active = false }
-  }, [auth.status, auth.user?.id])
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [auth.status, auth.user?.id, previewMode])
+
+  useEffect(() => () => {
+    for (const url of previewUrls.current) URL.revokeObjectURL(url)
+  }, [])
 
   useEffect(() => {
-    if (!appearance.image) {
-      setImageUrl('')
-      return undefined
+    const isOwnerTheme = !previewMode && auth.status !== 'loading' && !auth.user
+    const isCurrentUserLoaded = previewMode
+      ? loadedFor === 'preview'
+      : !!auth.user && loadedFor === auth.user.id
+    const isOwnerLoaded = isOwnerTheme && loadedFor === 'anonymous'
+    const ready = isCurrentUserLoaded || isOwnerLoaded
+    const wallpaper = ready
+      ? appearance.wallpaperUrl || (isOwnerTheme ? '/owner-wallpaper.svg' : null)
+      : null
+    applyWallpaper(wallpaper, appearance.opacity, appearance.clarity)
+    applyThemeColor(ready ? appearance.themeColor : null)
+    return () => {
+      applyWallpaper('', 0, 100)
+      applyThemeColor(null)
     }
-    const url = URL.createObjectURL(appearance.image)
-    setImageUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [appearance.image])
-
-  useEffect(() => {
-    if (!appearance.avatar) {
-      setAvatarUrl('')
-      return undefined
-    }
-    const url = URL.createObjectURL(appearance.avatar)
-    setAvatarUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [appearance.avatar])
+  }, [appearance, auth.status, auth.user?.id, loadedFor, previewMode])
 
   useEffect(() => {
     if (
-      auth.status !== 'ready' ||
-      !auth.user ||
+      previewMode || auth.status !== 'ready' || !auth.user ||
       loadedFor !== auth.user.id
     ) return undefined
     const timer = setTimeout(() => {
-      saveAppearance(auth.user.id, appearance).catch((error) =>
-        setMessage(error.message || '背景设置保存失败。'),
-      )
-    }, 250)
+      saveAppearance({
+        opacity: appearance.opacity,
+        clarity: appearance.clarity,
+        theme_color: appearance.themeColor,
+      }).then(() => setMessage('主题设置已同步到账号。'))
+        .catch((error) => setMessage(error.message || '主题设置保存失败。'))
+    }, 450)
     return () => clearTimeout(timer)
-  }, [appearance, auth.status, auth.user?.id, loadedFor])
-
-  const isReady = auth.status !== 'loading'
-  const ownerTheme = isReady && !auth.user
-  const isLoaded = auth.user && loadedFor === auth.user.id
-  const wallpaperUrl = ownerTheme
-    ? '/owner-wallpaper.svg'
-    : isLoaded && imageUrl
-  const opacity = ownerTheme ? 0.28 : appearance.opacity
-  const clarity = ownerTheme ? 88 : appearance.clarity
+  }, [appearance.opacity, appearance.clarity, appearance.themeColor, auth.status, auth.user?.id, loadedFor, previewMode])
 
   useEffect(() => {
-    applyWallpaper(wallpaperUrl, opacity, clarity)
-    return () => applyWallpaper('', 0, 100)
-  }, [wallpaperUrl, opacity, clarity])
+    if (!previewMode) return undefined
+    const frame = requestAnimationFrame(() => dialog.current?.showModal())
+    return () => cancelAnimationFrame(frame)
+  }, [previewMode])
+
+  const isReady = auth.status !== 'loading'
+  const canManageAppearance = previewMode || (isReady && !!auth.user)
+  const ownerTheme = isReady && !auth.user && !previewMode
+  const avatarReady = previewMode || !auth.user || loadedFor === auth.user.id
+  const avatarUrl = avatarReady ? appearance.avatarUrl : null
 
   function openSettings() {
     setMessage('')
     dialog.current?.showModal()
   }
 
-  async function chooseBackground(event) {
-    const picker = event.currentTarget
-    const file = picker.files?.[0]
-    picker.value = ''
-    if (!file) return
-    try {
-      const image = await prepareWallpaper(file)
-      setAppearance((old) => ({ ...old, image }))
-      setMessage('背景已更换。')
-    } catch (error) {
-      setMessage(error.message || '背景图片处理失败。')
-    }
-  }
-
-  async function chooseAvatar(event) {
-    const picker = event.currentTarget
-    const file = picker.files?.[0]
-    picker.value = ''
-    if (!file) return
-    try {
-      const avatar = await prepareAvatar(file)
-      setAppearance((old) => ({ ...old, avatar }))
-      setMessage('头像已更换。')
-    } catch (error) {
-      setMessage(error.message || '头像图片处理失败。')
-    }
-  }
-
   function changePreference(name, value) {
     setAppearance((old) => ({ ...old, [name]: value }))
-    setMessage('')
+    setMessage(previewMode ? '本地预览中，设置尚未上传。' : '')
+  }
+
+  async function chooseImage(event, kind) {
+    const picker = event.currentTarget
+    const file = picker.files?.[0]
+    picker.value = ''
+    if (!file) return
+    try {
+      const image = kind === 'wallpaper'
+        ? await prepareWallpaper(file)
+        : await prepareAvatar(file)
+      const property = kind === 'wallpaper' ? 'wallpaperUrl' : 'avatarUrl'
+      if (previewMode) {
+        const url = URL.createObjectURL(image)
+        previewUrls.current.push(url)
+        setAppearance((old) => ({ ...old, [property]: url }))
+        setMessage('本地预览中，图片尚未上传。')
+        return
+      }
+      const result = await uploadAppearanceImage(kind, image)
+      setAppearance((old) => ({
+        ...old,
+        [property]: result[`${kind}_url`] || old[property],
+      }))
+      setMessage(kind === 'wallpaper'
+        ? '背景已上传到账号，其他设备刷新后即可看到。'
+        : '头像已上传到账号，其他设备刷新后即可看到。')
+    } catch (error) {
+      setMessage(error.message || '图片上传失败。')
+    }
+  }
+
+  async function removeImage(kind) {
+    const property = kind === 'wallpaper' ? 'wallpaperUrl' : 'avatarUrl'
+    try {
+      if (!previewMode) await removeAppearanceImage(kind)
+      setAppearance((old) => ({ ...old, [property]: null }))
+      setMessage(previewMode ? '本地预览已恢复默认。' : '已从账号中移除图片。')
+    } catch (error) {
+      setMessage(error.message || '图片移除失败。')
+    }
   }
 
   return (
@@ -224,12 +286,12 @@ export default function SiteChrome() {
         >
           <img src={avatarUrl || '/apple-touch-icon.png'} alt="" />
         </button>
-        {auth.status === 'ready' && auth.user && (
+        {canManageAppearance && (
           <button
             className="orbit-settings"
             type="button"
-            aria-label="背景设置"
-            title="背景设置"
+            aria-label="背景与主题设置"
+            title="背景与主题设置"
             onClick={openSettings}
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -253,7 +315,7 @@ export default function SiteChrome() {
         </div>
       </nav>
 
-      {auth.status === 'ready' && auth.user && (
+      {canManageAppearance && (
         <dialog ref={dialog} className="appearance-dialog" aria-labelledby="appearance-title">
           <button
             className="appearance-close"
@@ -263,13 +325,19 @@ export default function SiteChrome() {
           >
             ×
           </button>
-          <h2 id="appearance-title">背景设置</h2>
+          <h2 id="appearance-title">背景与主题</h2>
+          {previewMode && (
+            <p className="appearance-note">本地预览：图片和设置仅在当前页面生效，不会上传服务器。</p>
+          )}
+          {ownerTheme && (
+            <p className="appearance-note">站长设置的背景和主题色也会显示给未登录访客。</p>
+          )}
           <label className="appearance-upload">
             选择背景图片
             <input
               type="file"
               accept="image/png,image/jpeg,image/webp"
-              onChange={chooseBackground}
+              onChange={(event) => chooseImage(event, 'wallpaper')}
             />
           </label>
           <div className="appearance-avatar-row">
@@ -279,21 +347,35 @@ export default function SiteChrome() {
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                onChange={chooseAvatar}
+                onChange={(event) => chooseImage(event, 'avatar')}
               />
             </label>
             <button
               className="secondary-button"
               type="button"
-              disabled={!appearance.avatar}
-              onClick={() => {
-                changePreference('avatar', null)
-                setMessage('已恢复默认头像。')
-              }}
+              disabled={!appearance.avatarUrl}
+              onClick={() => removeImage('avatar')}
             >
               恢复默认
             </button>
           </div>
+          <label className="appearance-theme-row">
+            <span>主题色</span>
+            <input
+              type="color"
+              value={appearance.themeColor || defaultThemeColor}
+              onChange={(event) => changePreference('themeColor', event.target.value)}
+              aria-label="选择主题色"
+            />
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={!appearance.themeColor}
+              onClick={() => changePreference('themeColor', null)}
+            >
+              恢复默认
+            </button>
+          </label>
           <label className="appearance-range">
             <span>透明度 <output>{Math.round(appearance.opacity * 100)}%</output></span>
             <input
@@ -301,9 +383,7 @@ export default function SiteChrome() {
               min="10"
               max="70"
               value={Math.round(appearance.opacity * 100)}
-              onChange={(event) =>
-                changePreference('opacity', Number(event.target.value) / 100)
-              }
+              onChange={(event) => changePreference('opacity', Number(event.target.value) / 100)}
             />
           </label>
           <label className="appearance-range">
@@ -313,20 +393,15 @@ export default function SiteChrome() {
               min="0"
               max="100"
               value={appearance.clarity}
-              onChange={(event) =>
-                changePreference('clarity', Number(event.target.value))
-              }
+              onChange={(event) => changePreference('clarity', Number(event.target.value))}
             />
           </label>
           <div className="appearance-actions">
             <button
               className="secondary-button"
               type="button"
-              disabled={!appearance.image}
-              onClick={() => {
-                changePreference('image', null)
-                setMessage('已移除背景图片。')
-              }}
+              disabled={!appearance.wallpaperUrl}
+              onClick={() => removeImage('wallpaper')}
             >
               移除背景
             </button>

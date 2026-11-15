@@ -17,7 +17,7 @@ Do not put `.env.local` in Git or send its values in chat.
 The example deployment files assume the repository is at `/home/tap000/my-portfolio`, the system account is `tap000`, the API domain is `pub.lonnet.uk`, and PostgreSQL listens on `127.0.0.1:5432`. Edit the service and Caddyfile if any of those are different.
 
 - `.env.production.example` is a template for `/etc/portfolio-api.env`. Use the server PostgreSQL port `5432`, not the Windows tunnel port `5433`.
-- `deploy/portfolio-api.service` runs the API as `tap000` and stores cover and painting images under `/var/lib/portfolio-api`.
+- `deploy/portfolio-api.service` runs the API as `tap000` and stores cover, painting, and appearance images under `/var/lib/portfolio-api`.
 - `deploy/Caddyfile` proxies HTTPS requests to the loopback-only Node process.
 - The repository `netlify.toml` proxies the browser's `/api/*` requests to `https://pub.lonnet.uk/api/*`.
 
@@ -34,4 +34,5 @@ Each account imports its own JSON or ZIP export from the site's Data Backup page
 - Registration and password recovery require the configured SMTP server.
 - Cover files are local files; back up `/var/lib/portfolio-api/covers` along with PostgreSQL.
 - Painting files are local files; run `server/migrations/002_paintings.sql` once on the production database and create `/var/lib/portfolio-api/paintings` owned by `tap000` before deploying the gallery API. Back up this directory along with PostgreSQL.
+- User wallpapers and avatars are stored under `/var/lib/portfolio-api/appearance`; run `server/migrations/003_user_appearance.sql` once on the production database and create this directory owned by `tap000` before deploying account-synced themes. Back up this directory along with PostgreSQL.
 - Configure regular PostgreSQL backups and a server restore procedure before relying on this as the only copy of the records.

@@ -7,6 +7,7 @@ import { handleInvitationRoute } from './invitations.js'
 import { handleCoverRoute } from './covers.js'
 import { handleDailyRoute } from './daily.js'
 import { handlePaintingRoute } from './paintings.js'
+import { handleAppearanceRoute } from './appearance.js'
 
 const port = Number(process.env.PORT || 3001)
 
@@ -55,6 +56,14 @@ const server = createServer(async (request, response) => {
 
   if (
     await handlePaintingRoute(
+      request,
+      response,
+      new URL(request.url || '/', 'http://localhost'),
+    )
+  ) return
+
+  if (
+    await handleAppearanceRoute(
       request,
       response,
       new URL(request.url || '/', 'http://localhost'),
