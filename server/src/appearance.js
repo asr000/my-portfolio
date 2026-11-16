@@ -256,7 +256,7 @@ export async function handleAppearanceRoute(request, response, url) {
       sendJson(response, 200, serialize(await appearanceForUser(user.id)))
       return true
     }
-    if (privateImage) {
+    if (method === 'GET' && privateImage) {
       await serveImage(response, await appearanceForUser(user.id), privateImage[1], false)
       return true
     }
