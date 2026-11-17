@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from './lib/authContext.js'
+import ImageCropDialog from './ImageCropDialog.jsx'
 import {
   loadAppearance,
   removeAppearanceImage,
@@ -10,6 +11,7 @@ import './siteChrome.css'
 
 const defaultUserAppearance = {
   wallpaperUrl: null,
+  mobileWallpaperUrl: null,
   avatarUrl: null,
   opacity: 0.3,
   clarity: 92,
@@ -22,63 +24,11 @@ const defaultOwnerAppearance = {
 }
 const defaultThemeColor = '#925063'
 
-async function prepareWallpaper(file) {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
-    throw new Error('请选择 JPEG、PNG 或 WebP 图片。')
-  if (file.size > 12 * 1024 * 1024)
-    throw new Error('背景图片不能超过 12 MB。')
-  const bitmap = await createImageBitmap(file)
-  try {
-    const scale = Math.min(1, 2200 / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    const encode = (type, quality) =>
-      new Promise((resolve) => canvas.toBlob(resolve, type, quality))
-    const webp = await encode('image/webp', 0.82)
-    if (webp?.type === 'image/webp' && webp.size <= 8 * 1024 * 1024)
-      return webp
-    const jpeg = await encode('image/jpeg', 0.78)
-    if (!jpeg) throw new Error('无法处理这张图片，请换一张图片。')
-    if (jpeg.size > 8 * 1024 * 1024)
-      throw new Error('处理后的背景图片仍超过 8 MB。')
-    return jpeg
-  } finally {
-    bitmap.close()
-  }
-}
-
-async function prepareAvatar(file) {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
-    throw new Error('请选择 JPEG、PNG 或 WebP 图片。')
-  if (file.size > 12 * 1024 * 1024)
-    throw new Error('头像图片不能超过 12 MB。')
-  const bitmap = await createImageBitmap(file)
-  try {
-    const edge = Math.min(bitmap.width, bitmap.height)
-    const x = (bitmap.width - edge) / 2
-    const y = (bitmap.height - edge) / 2
-    const canvas = document.createElement('canvas')
-    canvas.width = 512
-    canvas.height = 512
-    canvas.getContext('2d').drawImage(bitmap, x, y, edge, edge, 0, 0, 512, 512)
-    const avatar = await new Promise((resolve) =>
-      canvas.toBlob(resolve, 'image/webp', 0.84),
-    )
-    if (!avatar) throw new Error('无法处理这张头像图片，请换一张图片。')
-    if (avatar.size > 2 * 1024 * 1024)
-      throw new Error('处理后的头像仍超过 2 MB。')
-    return avatar
-  } finally {
-    bitmap.close()
-  }
-}
-
 function fromServer(value, defaults) {
   return {
     ...defaults,
     wallpaperUrl: value?.wallpaper_url || null,
+    mobileWallpaperUrl: value?.mobile_wallpaper_url || null,
     avatarUrl: value?.avatar_url || null,
     opacity: Number.isFinite(Number(value?.opacity)) ? Number(value.opacity) : defaults.opacity,
     clarity: Number.isFinite(Number(value?.clarity)) ? Number(value.clarity) : defaults.clarity,
@@ -86,9 +36,11 @@ function fromServer(value, defaults) {
   }
 }
 
-function applyWallpaper(url, opacity, clarity) {
+function applyWallpaper(url, mobileUrl, opacity, clarity) {
   const style = document.documentElement.style
   style.setProperty('--wallpaper-image', url ? `url("${url}")` : 'none')
+  if (mobileUrl) style.setProperty('--wallpaper-image-mobile', `url("${mobileUrl}")`)
+  else style.removeProperty('--wallpaper-image-mobile')
   style.setProperty('--wallpaper-opacity', String(opacity))
   style.setProperty('--wallpaper-blur', `${((100 - clarity) * 0.08).toFixed(1)}px`)
 }
@@ -126,6 +78,7 @@ export default function SiteChrome() {
   const [appearance, setAppearance] = useState(defaultUserAppearance)
   const [loadedFor, setLoadedFor] = useState(null)
   const [message, setMessage] = useState('')
+  const [cropRequest, setCropRequest] = useState(null)
   const dialog = useRef(null)
   const previewUrls = useRef([])
 
@@ -179,10 +132,10 @@ export default function SiteChrome() {
     const wallpaper = ready
       ? appearance.wallpaperUrl || (isOwnerTheme ? '/owner-wallpaper.svg' : null)
       : null
-    applyWallpaper(wallpaper, appearance.opacity, appearance.clarity)
+    applyWallpaper(wallpaper, ready ? appearance.mobileWallpaperUrl : null, appearance.opacity, appearance.clarity)
     applyThemeColor(ready ? appearance.themeColor : null)
     return () => {
-      applyWallpaper('', 0, 100)
+      applyWallpaper('', null, 0, 100)
       applyThemeColor(null)
     }
   }, [appearance, auth.status, auth.user?.id, loadedFor, previewMode])
@@ -230,36 +183,66 @@ export default function SiteChrome() {
     const file = picker.files?.[0]
     picker.value = ''
     if (!file) return
-    try {
-      const image = kind === 'wallpaper'
-        ? await prepareWallpaper(file)
-        : await prepareAvatar(file)
-      const property = kind === 'wallpaper' ? 'wallpaperUrl' : 'avatarUrl'
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setMessage('请选择 JPEG、PNG 或 WebP 图片。')
+      return
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      setMessage('图片不能超过 12 MB。')
+      return
+    }
+    setMessage('')
+    setCropRequest({ file, kind })
+  }
+
+  async function acceptCrop(result) {
+    const kind = cropRequest?.kind
+    if (!kind) return
+    if (kind === 'avatar') {
       if (previewMode) {
-        const url = URL.createObjectURL(image)
+        const url = URL.createObjectURL(result)
         previewUrls.current.push(url)
-        setAppearance((old) => ({ ...old, [property]: url }))
-        setMessage('本地预览中，图片尚未上传。')
-        return
+        setAppearance((old) => ({ ...old, avatarUrl: url }))
+        setMessage('本地预览中，头像尚未上传。')
+      } else {
+        const uploaded = await uploadAppearanceImage('avatar', result)
+        setAppearance((old) => ({ ...old, avatarUrl: uploaded.avatar_url || old.avatarUrl }))
+        setMessage('头像已上传到账号，其他设备刷新后即可看到。')
       }
-      const result = await uploadAppearanceImage(kind, image)
+    } else if (previewMode) {
+      const desktopUrl = URL.createObjectURL(result.desktop)
+      const mobileUrl = URL.createObjectURL(result.mobile)
+      previewUrls.current.push(desktopUrl, mobileUrl)
+      setAppearance((old) => ({ ...old, wallpaperUrl: desktopUrl, mobileWallpaperUrl: mobileUrl }))
+      setMessage('本地预览中，壁纸尚未上传。')
+    } else {
+      const desktop = await uploadAppearanceImage('wallpaper', result.desktop)
+      setAppearance((old) => ({ ...old, wallpaperUrl: desktop.wallpaper_url || old.wallpaperUrl }))
+      const mobile = await uploadAppearanceImage('mobile-wallpaper', result.mobile)
       setAppearance((old) => ({
         ...old,
-        [property]: result[`${kind}_url`] || old[property],
+        wallpaperUrl: desktop.wallpaper_url || old.wallpaperUrl,
+        mobileWallpaperUrl: mobile.mobile_wallpaper_url || old.mobileWallpaperUrl,
       }))
-      setMessage(kind === 'wallpaper'
-        ? '背景已上传到账号，其他设备刷新后即可看到。'
-        : '头像已上传到账号，其他设备刷新后即可看到。')
-    } catch (error) {
-      setMessage(error.message || '图片上传失败。')
+      setMessage('电脑和手机壁纸已同步到账号。')
     }
+    setCropRequest(null)
   }
 
   async function removeImage(kind) {
-    const property = kind === 'wallpaper' ? 'wallpaperUrl' : 'avatarUrl'
     try {
-      if (!previewMode) await removeAppearanceImage(kind)
-      setAppearance((old) => ({ ...old, [property]: null }))
+      if (kind === 'wallpaper') {
+        if (!previewMode) {
+          await Promise.all([
+            removeAppearanceImage('wallpaper'),
+            removeAppearanceImage('mobile-wallpaper'),
+          ])
+        }
+        setAppearance((old) => ({ ...old, wallpaperUrl: null, mobileWallpaperUrl: null }))
+      } else {
+        if (!previewMode) await removeAppearanceImage('avatar')
+        setAppearance((old) => ({ ...old, avatarUrl: null }))
+      }
       setMessage(previewMode ? '本地预览已恢复默认。' : '已从账号中移除图片。')
     } catch (error) {
       setMessage(error.message || '图片移除失败。')
@@ -381,7 +364,7 @@ export default function SiteChrome() {
             <input
               type="range"
               min="10"
-              max="70"
+              max="100"
               value={Math.round(appearance.opacity * 100)}
               onChange={(event) => changePreference('opacity', Number(event.target.value) / 100)}
             />
@@ -411,6 +394,14 @@ export default function SiteChrome() {
           </div>
           {message && <p className="appearance-message" role="status">{message}</p>}
         </dialog>
+      )}
+      {cropRequest && (
+        <ImageCropDialog
+          sourceFile={cropRequest.file}
+          kind={cropRequest.kind}
+          onCancel={() => setCropRequest(null)}
+          onConfirm={acceptCrop}
+        />
       )}
     </>
   )

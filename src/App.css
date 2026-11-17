@@ -224,6 +224,93 @@ h2 {
 .record-article {
   width: min(100%, 760px);
   margin: 24px auto 0;
+  padding: clamp(20px, 3.4vw, 32px);
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-panel) 96%, transparent);
+  box-shadow: 0 16px 48px #30241b12;
+  backdrop-filter: blur(14px) saturate(1.05);
+}
+.record-article > :last-child {
+  margin-bottom: 0;
+}
+
+.record-cover-hero {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  margin: 0 0 24px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-input);
+  color: var(--text-muted);
+  cursor: zoom-in;
+}
+.record-cover-hero:disabled {
+  cursor: default;
+}
+.record-cover-hero > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.record-cover-open-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border: 1px solid #ffffff66;
+  border-radius: 999px;
+  background: #17131b88;
+  color: white;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.record-cover-hero:hover .record-cover-open-hint,
+.record-cover-hero:focus-visible .record-cover-open-hint {
+  opacity: 1;
+}
+.record-cover-lightbox {
+  position: fixed;
+  max-width: min(96vw, 1400px);
+  max-height: 94dvh;
+  padding: 42px 12px 12px;
+  overflow: visible;
+  border: 1px solid #ffffff30;
+  border-radius: 18px;
+  background: #17131bf2;
+  color: white;
+}
+.record-cover-lightbox::backdrop {
+  background: #100d13d9;
+  backdrop-filter: blur(8px);
+}
+.record-cover-lightbox > img {
+  display: block;
+  max-width: min(92vw, 1320px);
+  max-height: calc(94dvh - 60px);
+  object-fit: contain;
+  border-radius: 10px;
+}
+.record-cover-lightbox-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #ffffff66;
+  border-radius: 50%;
+  background: #ffffff12;
+  color: white;
+  font-size: 24px;
+  line-height: 1;
 }
 
 .record-article h1 {
@@ -1044,10 +1131,18 @@ small,
   .record-page {
     padding: 24px 16px;
   }
+  .record-cover-hero {
+    margin-bottom: 18px;
+    border-radius: 14px;
+  }
   .record-editor h1,
   .record-article h1 {
     font-size: 28px;
     overflow-wrap: anywhere;
+  }
+  .record-article {
+    padding: 20px 16px;
+    border-radius: 18px;
   }
   .record-card {
     gap: 12px;

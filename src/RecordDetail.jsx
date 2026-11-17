@@ -14,6 +14,7 @@ import { canWriteNotes } from './lib/recordsApi.js'
 import PublicRecord from './PublicRecord.jsx'
 import PageTopbar from './PageTopbar.jsx'
 import HelpHint from './HelpHint.jsx'
+import RecordCoverHero from './RecordCoverHero.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
@@ -235,6 +236,7 @@ export default function RecordDetail({ recordId, manage = false }) {
           {record.deleted_at && (
             <p className="notice">这条记录在回收站中，封面仍然保留。</p>
           )}
+          <RecordCoverHero coverPath={record.cover_path} />
           <h1>{manage ? '管理记录' : record.title}</h1>
           {manage && <h2 className="managed-record-title">{record.title}</h2>}
           <p className="record-meta">

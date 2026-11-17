@@ -14,7 +14,29 @@ const extensionByType = {
 const typeByExtension = Object.fromEntries(
   Object.entries(extensionByType).map(([type, extension]) => [extension, type]),
 )
-const maxBytesByKind = { wallpaper: 8 * 1024 * 1024, avatar: 2 * 1024 * 1024 }
+const imageFields = {
+  wallpaper: {
+    path: 'wallpaper_path',
+    type: 'wallpaper_content_type',
+    url: 'wallpaper_url',
+    maxBytes: 8 * 1024 * 1024,
+  },
+  'mobile-wallpaper': {
+    path: 'mobile_wallpaper_path',
+    type: 'mobile_wallpaper_content_type',
+    url: 'mobile_wallpaper_url',
+    maxBytes: 8 * 1024 * 1024,
+  },
+  avatar: {
+    path: 'avatar_path',
+    type: 'avatar_content_type',
+    url: 'avatar_url',
+    maxBytes: 2 * 1024 * 1024,
+  },
+}
+const appearanceColumns = `wallpaper_path, wallpaper_content_type,
+  mobile_wallpaper_path, mobile_wallpaper_content_type,
+  avatar_path, avatar_content_type, opacity, clarity, theme_color, updated_at`
 const root = resolve(
   process.env.APPEARANCE_DIR || fileURLToPath(new URL('../data/appearance', import.meta.url)),
 )
@@ -35,8 +57,11 @@ async function readImage(request, kind) {
   let size = 0
   for await (const chunk of request) {
     size += chunk.length
-    if (size > maxBytesByKind[kind])
-      throw httpError(413, kind === 'wallpaper' ? '背景图片不能超过 8 MB。' : '头像图片不能超过 2 MB。')
+    if (size > imageFields[kind].maxBytes) {
+      const description = kind === 'avatar' ? '头像' : '壁纸'
+      const limit = kind === 'avatar' ? '2 MB' : '8 MB'
+      throw httpError(413, `${description}图片不能超过 ${limit}。`)
+    }
     chunks.push(chunk)
   }
   if (!size) throw httpError(400, '图片文件为空。')
@@ -55,7 +80,8 @@ function validImage(bytes, type) {
 }
 
 function imageUrl(row, kind, isPublic = false) {
-  const path = kind === 'wallpaper' ? row?.wallpaper_path : row?.avatar_path
+  const field = imageFields[kind]
+  const path = row?.[field.path]
   if (!path) return null
   const version = row.updated_at instanceof Date
     ? row.updated_at.getTime()
@@ -67,6 +93,7 @@ function imageUrl(row, kind, isPublic = false) {
 function serialize(row, isPublic = false) {
   return {
     wallpaper_url: imageUrl(row, 'wallpaper', isPublic),
+    mobile_wallpaper_url: imageUrl(row, 'mobile-wallpaper', isPublic),
     avatar_url: imageUrl(row, 'avatar', isPublic),
     opacity: row?.opacity == null ? (isPublic ? 0.28 : 0.30) : Number(row.opacity),
     clarity: row?.clarity == null ? (isPublic ? 88 : 92) : Number(row.clarity),
@@ -76,8 +103,7 @@ function serialize(row, isPublic = false) {
 
 async function appearanceForUser(userId) {
   const { rows } = await pool.query(
-    `SELECT wallpaper_path, wallpaper_content_type, avatar_path, avatar_content_type,
-            opacity, clarity, theme_color, updated_at
+    `SELECT ${appearanceColumns}
        FROM user_appearances WHERE user_id = $1 LIMIT 1`,
     [userId],
   )
@@ -86,8 +112,10 @@ async function appearanceForUser(userId) {
 
 async function appearanceForAuthor() {
   const { rows } = await pool.query(
-    `SELECT a.wallpaper_path, a.wallpaper_content_type, a.avatar_path,
-            a.avatar_content_type, a.opacity, a.clarity, a.theme_color, a.updated_at
+    `SELECT a.wallpaper_path, a.wallpaper_content_type,
+            a.mobile_wallpaper_path, a.mobile_wallpaper_content_type,
+            a.avatar_path, a.avatar_content_type, a.opacity, a.clarity,
+            a.theme_color, a.updated_at
        FROM users u LEFT JOIN user_appearances a ON a.user_id = u.id
       WHERE u.is_author ORDER BY u.created_at, u.id LIMIT 1`,
   )
@@ -103,10 +131,9 @@ function safeFile(path) {
 }
 
 async function serveImage(response, row, kind, isPublic) {
-  const imagePath = kind === 'wallpaper' ? row?.wallpaper_path : row?.avatar_path
-  const contentType = kind === 'wallpaper'
-    ? row?.wallpaper_content_type
-    : row?.avatar_content_type
+  const field = imageFields[kind]
+  const imagePath = row?.[field.path]
+  const contentType = row?.[field.type]
   if (!imagePath || !contentType || typeByExtension[imagePath.split('.').at(-1)] !== contentType)
     throw httpError(404, '图片不存在。')
   const file = safeFile(imagePath)
@@ -146,8 +173,9 @@ async function uploadImage(request, response, user, kind) {
   await mkdir(root, { recursive: true })
   await writeFile(file, bytes, { flag: 'wx', mode: 0o600 })
 
-  const pathColumn = kind === 'wallpaper' ? 'wallpaper_path' : 'avatar_path'
-  const typeColumn = kind === 'wallpaper' ? 'wallpaper_content_type' : 'avatar_content_type'
+  const field = imageFields[kind]
+  const pathColumn = field.path
+  const typeColumn = field.type
   try {
     const previous = await appearanceForUser(user.id)
     const oldPath = previous?.[pathColumn]
@@ -157,8 +185,7 @@ async function uploadImage(request, response, user, kind) {
        ON CONFLICT (user_id) DO UPDATE
          SET ${pathColumn} = EXCLUDED.${pathColumn},
              ${typeColumn} = EXCLUDED.${typeColumn}, updated_at = now()
-       RETURNING wallpaper_path, wallpaper_content_type, avatar_path,
-                 avatar_content_type, opacity, clarity, theme_color, updated_at`,
+       RETURNING ${appearanceColumns}`,
       [user.id, imagePath, contentType],
     )
     if (oldPath && oldPath !== imagePath)
@@ -190,7 +217,7 @@ async function updateSettings(request, response, user) {
   const themeColor = body.theme_color == null || body.theme_color === ''
     ? null
     : String(body.theme_color)
-  if (!Number.isFinite(opacity) || opacity < 0.1 || opacity > 0.7)
+  if (!Number.isFinite(opacity) || opacity < 0.1 || opacity > 1)
     throw httpError(400, '背景透明度设置无效。')
   if (!Number.isInteger(clarity) || clarity < 0 || clarity > 100)
     throw httpError(400, '背景清晰度设置无效。')
@@ -203,16 +230,16 @@ async function updateSettings(request, response, user) {
      ON CONFLICT (user_id) DO UPDATE
        SET opacity = EXCLUDED.opacity, clarity = EXCLUDED.clarity,
            theme_color = EXCLUDED.theme_color, updated_at = now()
-     RETURNING wallpaper_path, wallpaper_content_type, avatar_path,
-               avatar_content_type, opacity, clarity, theme_color, updated_at`,
+     RETURNING ${appearanceColumns}`,
     [user.id, opacity, clarity, themeColor],
   )
   sendJson(response, 200, serialize(rows[0]))
 }
 
 async function removeImage(response, user, kind) {
-  const pathColumn = kind === 'wallpaper' ? 'wallpaper_path' : 'avatar_path'
-  const typeColumn = kind === 'wallpaper' ? 'wallpaper_content_type' : 'avatar_content_type'
+  const field = imageFields[kind]
+  const pathColumn = field.path
+  const typeColumn = field.type
   const previous = await appearanceForUser(user.id)
   const oldPath = previous?.[pathColumn]
   await pool.query(
@@ -229,14 +256,15 @@ async function removeImage(response, user, kind) {
 export async function handleAppearanceRoute(request, response, url) {
   const { pathname } = url
   const method = request.method || 'GET'
-  const privateImage = pathname.match(/^\/api\/appearance\/image\/(wallpaper|avatar)$/)
-  const publicImage = pathname.match(/^\/api\/public\/appearance\/image\/(wallpaper|avatar)$/)
+  const imageKinds = '(wallpaper|mobile-wallpaper|avatar)'
+  const privateImage = pathname.match(new RegExp(`^/api/appearance/image/${imageKinds}$`))
+  const publicImage = pathname.match(new RegExp(`^/api/public/appearance/image/${imageKinds}$`))
   const recognized =
     (method === 'GET' && pathname === '/api/appearance') ||
     (method === 'GET' && pathname === '/api/public/appearance') ||
     (method === 'PUT' && pathname === '/api/appearance') ||
-    (method === 'POST' && /^\/api\/appearance\/image\/(wallpaper|avatar)$/.test(pathname)) ||
-    (method === 'DELETE' && /^\/api\/appearance\/image\/(wallpaper|avatar)$/.test(pathname)) ||
+    (method === 'POST' && new RegExp(`^/api/appearance/image/${imageKinds}$`).test(pathname)) ||
+    (method === 'DELETE' && new RegExp(`^/api/appearance/image/${imageKinds}$`).test(pathname)) ||
     (method === 'GET' && !!privateImage) ||
     (method === 'GET' && !!publicImage)
   if (!recognized) return false
@@ -260,7 +288,7 @@ export async function handleAppearanceRoute(request, response, url) {
       await serveImage(response, await appearanceForUser(user.id), privateImage[1], false)
       return true
     }
-    const imageMatch = pathname.match(/^\/api\/appearance\/image\/(wallpaper|avatar)$/)
+    const imageMatch = pathname.match(new RegExp(`^/api/appearance/image/${imageKinds}$`))
     if (method === 'POST' && imageMatch) {
       await uploadImage(request, response, user, imageMatch[1])
       return true

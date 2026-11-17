@@ -13,7 +13,9 @@ const extensionByType = {
   'image/png': 'png',
 }
 const root = resolve(
-  process.env.PAINTING_DIR || fileURLToPath(new URL('../data/paintings', import.meta.url)),
+  process.env.PAINTING_DIR || (process.env.NODE_ENV === 'production'
+    ? '/var/lib/portfolio-api/paintings'
+    : fileURLToPath(new URL('../data/paintings', import.meta.url))),
 )
 
 function sendJson(response, status, value) {

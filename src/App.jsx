@@ -20,6 +20,7 @@ import ThemeToggle from './ThemeToggle.jsx'
 import SiteChrome from './SiteChrome.jsx'
 import FriendsPage from './FriendsPage.jsx'
 import PaintingsPage from './PaintingsPage.jsx'
+import RecordsLayout from './RecordsLayout.jsx'
 
 const DataBackup = lazy(() => import('./DataBackup.jsx'))
 const MarkdownHelp = lazy(() => import('./MarkdownHelp.jsx'))
@@ -53,6 +54,32 @@ function Pages() {
   const isCreating = params.get('new') === '1'
   const isLoggingIn = params.get('login') === '1'
   const view = params.get('view')
+
+  if (import.meta.env.DEV && params.get('articlePreview') === '1')
+    return (
+      <RecordsLayout
+        publicPage
+        title="文章阅读预览"
+        description="这里仅预览正文底板；没有上传封面时，不会显示封面区域。"
+        back="/"
+        backLabel="返回主页"
+      >
+        <article className="record-article">
+          <h1>文章正文</h1>
+          <p className="record-meta">创建于 2026-11-17 · 阅读时间：2 分钟</p>
+          <div className="markdown-body">
+            <h2>清晰的阅读区域</h2>
+            <p>
+              文章内容现在放在独立底板上，底板会跟随浅色或深色主题变化。即使页面使用了自定义壁纸，正文和标题也能保持足够对比度。
+            </p>
+            <blockquote>
+              这段引用用于预览不同文章元素在底板上的显示效果。
+            </blockquote>
+            <p>这条本地预览没有封面，因此顶部不会出现封面图片或空白封面框。</p>
+          </div>
+        </article>
+      </RecordsLayout>
+    )
 
   if (
     auth.recovery ||

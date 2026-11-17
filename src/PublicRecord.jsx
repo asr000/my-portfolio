@@ -4,6 +4,7 @@ import { errorText, formatDate } from './lib/recordUtils.js'
 import { listReturn, loginLink } from './lib/navigation.js'
 import RecordsLayout from './RecordsLayout.jsx'
 import RecordSource from './RecordSource.jsx'
+import RecordCoverHero from './RecordCoverHero.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
@@ -66,6 +67,7 @@ export default function PublicRecord({ recordId }) {
       )}
       {status === 'ready' && record && (
         <article className="record-article public-record-article">
+          <RecordCoverHero coverPath={record.cover_path} publicAccess />
           <p className="public-record-source">
             <RecordSource record={record} />
           </p>
