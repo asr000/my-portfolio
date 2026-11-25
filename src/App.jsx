@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import './App.css'
 import Projects from './Projects.jsx'
 import RecordDetail from './RecordDetail.jsx'
@@ -13,6 +13,7 @@ import { RequireAccount } from './AuthAccess.jsx'
 import { useAuth } from './lib/authContext.js'
 import { loginLink } from './lib/navigation.js'
 import HomeHero from './HomeHero.jsx'
+import HomeAbout from './HomeAbout.jsx'
 import Account from './Account.jsx'
 import PublicRecord from './PublicRecord.jsx'
 import NoteWriteAccess from './NoteAccess.jsx'
@@ -26,6 +27,22 @@ const DataBackup = lazy(() => import('./DataBackup.jsx'))
 const MarkdownHelp = lazy(() => import('./MarkdownHelp.jsx'))
 const AuthPages = lazy(() => import('./AuthPages.jsx'))
 const Invitations = lazy(() => import('./Invitations.jsx'))
+const MarkdownContentPreview = lazy(() => import('./MarkdownContent.jsx'))
+
+function CoverLoadingPreview() {
+  const [finished, setFinished] = useState(false)
+  return (
+    <RecordsLayout publicPage title="封面加载动画预览" description="动画会持续播放，点击按钮查看加载完成后的效果。" back="/" backLabel="返回主页">
+      <article className="record-article">
+        <div className="record-cover-hero" style={{ cursor: 'default' }}>
+          {!finished && <span className="cover-loading" aria-label="封面加载中" />}
+          {finished && <img src="/apple-touch-icon.png" alt="示例封面" style={{ objectFit: 'contain' }} />}
+        </div>
+        <button type="button" onClick={() => setFinished((value) => !value)}>{finished ? '重新播放动画' : '模拟加载完成'}</button>
+      </article>
+    </RecordsLayout>
+  )
+}
 
 function Header() {
   const auth = useAuth()
@@ -54,6 +71,19 @@ function Pages() {
   const isCreating = params.get('new') === '1'
   const isLoggingIn = params.get('login') === '1'
   const view = params.get('view')
+
+  if (import.meta.env.DEV && params.get('coverLoadingPreview') === '1') return <CoverLoadingPreview />
+
+  if (import.meta.env.DEV && params.get('markdownPreview') === '1')
+    return (
+      <RecordsLayout publicPage title="文章排版预览" description="查看文字、数学公式和代码的显示效果。" back="/" backLabel="返回主页">
+        <article className="record-article">
+          <Suspense fallback={<p>正在准备文章…</p>}>
+            <MarkdownContentPreview content={'## 学习笔记\n\n正文支持**加粗**、列表和表格。\n\n勾股定理：$a^2 + b^2 = c^2$。\n\n```python\nprint("Hello, world!")\n```'} />
+          </Suspense>
+        </article>
+      </RecordsLayout>
+    )
 
   if (import.meta.env.DEV && params.get('articlePreview') === '1')
     return (
@@ -198,16 +228,15 @@ function Pages() {
       <main>
         <HomeHero />
 
-        <section id="about">
-          <h2>关于我</h2>
-          <p>好像还没啥可说的。</p>
-        </section>
+        <HomeAbout />
 
         <Projects />
 
         <section id="contact">
-          <h2>联系我</h2>
-          <p>QQ群:1129774429</p>
+          <div className="home-info-panel contact-panel">
+            <h2>联系我</h2>
+            <p>QQ群:1129774429</p>
+          </div>
         </section>
       </main>
     </div>

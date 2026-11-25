@@ -621,7 +621,7 @@ test('home retains its title and note entrance without a garden in both themes a
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: 'test-results/home-light-mobile.png', fullPage: true })
   expect(gardenRequests).toHaveLength(0)
-  await page.getByRole('link', { name: '查看我的练习', exact: true }).click()
+  await page.getByRole('link', { name: 'sharing', exact: true }).click()
   await expect(page.locator('.record-card')).toHaveCount(1)
 })
 
@@ -1743,7 +1743,7 @@ test('guests browse published work and covers without private-table or signed-li
   await expect(page.locator('.record-card')).toContainText('公开的练习')
   await page.getByRole('link', { name: '查看全部练习', exact: false }).click()
   await expect(
-    page.getByRole('heading', { name: '练习展示', exact: true }),
+    page.getByRole('heading', { name: '博客记录', exact: true }),
   ).toBeVisible()
   await expect(
     page.getByLabel('标签', { exact: true }).locator('option'),
@@ -2030,7 +2030,7 @@ test('public filters and return links keep their scope and private tags are excl
   await page.getByRole('button', { name: '搜索', exact: true }).click()
   await expect(page.locator('.record-card')).toHaveCount(1)
   await page.locator('.record-card').click()
-  await page.getByRole('link', { name: '返回练习展示', exact: false }).click()
+  await page.getByRole('link', { name: '返回博客记录', exact: false }).click()
   await expect(page).toHaveURL(/view=showcase/)
   await expect(page.getByLabel('搜索标题', { exact: true })).toHaveValue(
     '100%_',

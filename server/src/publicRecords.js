@@ -1,4 +1,5 @@
 import { pool } from './db.js'
+import { cachedPublicList } from './publicCache.js'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -21,14 +22,14 @@ export async function handlePublicGet(url, response) {
 
   if (pathname === '/api/public/tags') {
     try {
-      const { rows } = await pool.query(
+      const { rows } = await cachedPublicList('tags', () => pool.query(
         `SELECT DISTINCT unnest(r.tags) AS tag
          FROM records r
          JOIN users u ON u.id = r.user_id
          WHERE r.is_public AND r.deleted_at IS NULL
            AND ${publisherCondition}
          ORDER BY tag`,
-      )
+      ))
       sendJson(response, 200, rows.map((row) => row.tag))
     } catch (error) {
       console.error('Public tag query failed:', error.code || error.message)
@@ -62,7 +63,8 @@ export async function handlePublicGet(url, response) {
     }
 
     try {
-      const { rows } = await pool.query(
+      const key = JSON.stringify(['records', query, tag, beforeCreatedAt, beforeId, rawLimit])
+      const { rows } = await cachedPublicList(key, () => pool.query(
         `SELECT r.id, r.title, r.tags, r.cover_path, r.created_at, r.updated_at,
            COALESCE(NULLIF(btrim(p.display_name), ''),
              CASE WHEN u.is_author THEN '网站作者'
@@ -79,7 +81,7 @@ export async function handlePublicGet(url, response) {
          ORDER BY r.created_at DESC, r.id DESC
          LIMIT $5`,
         [query, tag, beforeCreatedAt, beforeId, rawLimit],
-      )
+      ))
       sendJson(response, 200, rows)
     } catch (error) {
       console.error('Public records query failed:', error.code || error.message)

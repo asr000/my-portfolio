@@ -40,12 +40,12 @@ function validImage(bytes, type) {
     bytes.toString('ascii', 8, 12) === 'WEBP'
 }
 
-async function readImage(request) {
+async function readImage(request, maxBytes = maxPaintingBytes) {
   const chunks = []
   let size = 0
   for await (const chunk of request) {
     size += chunk.length
-    if (size > maxPaintingBytes) throw httpError(413, '单张作品不能超过 8 MB。')
+    if (size > maxBytes) throw httpError(413, '图片文件过大。')
     chunks.push(chunk)
   }
   if (!size) throw httpError(400, '图片文件为空。')
@@ -68,8 +68,9 @@ function paintingTitle(request) {
 async function listPaintings(response) {
   try {
     const { rows } = await pool.query(
-      `SELECT id, title, created_at,
-         '/api/public/paintings/' || id::text || '/image' AS image_url
+      `SELECT id, title, created_at, duration_text, stroke_count, description,
+         '/api/public/paintings/' || id::text || '/image' AS image_url,
+         '/api/public/paintings/' || id::text || '/thumbnail' AS thumbnail_url
        FROM paintings ORDER BY created_at DESC, id DESC`,
     )
     sendJson(response, 200, rows)
@@ -79,7 +80,7 @@ async function listPaintings(response) {
   }
 }
 
-async function getPaintingImage(response, id) {
+async function getPaintingImage(response, id, thumbnail = false) {
   if (!uuidPattern.test(id)) throw httpError(404, '作品图片不存在。')
   const { rows } = await pool.query(
     'SELECT image_path, content_type FROM paintings WHERE id = $1 LIMIT 1',
@@ -92,14 +93,31 @@ async function getPaintingImage(response, id) {
     throw httpError(404, '作品图片不存在。')
   const file = resolve(root, painting.image_path)
   if (dirname(file) !== root) throw httpError(404, '作品图片不存在。')
-  const bytes = await readFile(file).catch((error) => {
+  let imageFile = file
+  let contentType = painting.content_type
+  let thumbnailFound = false
+  let bytes
+  if (thumbnail) {
+    for (const [extension, type] of [['webp', 'image/webp'], ['jpg', 'image/jpeg']]) {
+      try {
+        imageFile = resolve(root, `${id}.thumb.${extension}`)
+        bytes = await readFile(imageFile)
+        contentType = type
+        thumbnailFound = true
+        break
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error
+      }
+    }
+  }
+  if (!bytes) bytes = await readFile(file).catch((error) => {
     if (error.code === 'ENOENT') throw httpError(404, '作品图片不存在。')
     throw error
   })
   response.writeHead(200, {
-    'Content-Type': painting.content_type,
+    'Content-Type': contentType,
     'Content-Length': String(bytes.length),
-    'Cache-Control': 'public, max-age=31536000, immutable',
+    'Cache-Control': thumbnail && !thumbnailFound ? 'no-store' : 'public, max-age=31536000, immutable',
     'X-Content-Type-Options': 'nosniff',
   })
   response.end(bytes)
@@ -125,8 +143,9 @@ async function uploadPainting(request, response, user) {
     const { rows } = await pool.query(
       `INSERT INTO paintings (id, title, image_path, content_type, created_by)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, title, created_at,
-         '/api/public/paintings/' || id::text || '/image' AS image_url`,
+       RETURNING id, title, created_at, duration_text, stroke_count, description,
+         '/api/public/paintings/' || id::text || '/image' AS image_url,
+         '/api/public/paintings/' || id::text || '/thumbnail' AS thumbnail_url`,
       [id, title, imagePath, contentType, user.id],
     )
     sendJson(response, 201, rows[0])
@@ -136,14 +155,71 @@ async function uploadPainting(request, response, user) {
   }
 }
 
+async function updatePaintingDetails(request, response, user, id) {
+  if (!user.is_author) throw httpError(403, '只有站长可以编辑作品说明。')
+  if (!uuidPattern.test(id)) throw httpError(404, '作品不存在。')
+  const chunks = []
+  let size = 0
+  for await (const chunk of request) {
+    size += chunk.length
+    if (size > 8192) throw httpError(413, '作品说明过长。')
+    chunks.push(chunk)
+  }
+  let body
+  try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')) }
+  catch { throw httpError(400, '作品说明格式无效。') }
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    throw httpError(400, '作品说明格式无效。')
+  if ((body.duration_text != null && typeof body.duration_text !== 'string') ||
+      (body.description != null && typeof body.description !== 'string'))
+    throw httpError(400, '作品说明格式无效。')
+  const duration = typeof body.duration_text === 'string' ? body.duration_text.trim() : ''
+  const description = typeof body.description === 'string' ? body.description.trim() : ''
+  const strokes = body.stroke_count
+  if (duration.length > 40 || /[\u0000-\u001f\u007f]/.test(duration))
+    throw httpError(400, '时长不能超过 40 个字符。')
+  if (description.length > 1000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(description))
+    throw httpError(400, '内容简述不能超过 1000 个字符。')
+  if (strokes !== null && (!Number.isInteger(strokes) || strokes < 0 || strokes > 2147483647))
+    throw httpError(400, '笔数请输入有效的非负整数。')
+  const { rows } = await pool.query(
+    `UPDATE paintings SET duration_text = $2, stroke_count = $3, description = $4
+     WHERE id = $1 RETURNING id, title, created_at, duration_text, stroke_count, description,
+       '/api/public/paintings/' || id::text || '/image' AS image_url,
+       '/api/public/paintings/' || id::text || '/thumbnail' AS thumbnail_url`,
+    [id, duration || null, strokes, description || null],
+  )
+  if (!rows.length) throw httpError(404, '作品不存在。')
+  sendJson(response, 200, rows[0])
+}
+
+async function uploadThumbnail(request, response, user, id) {
+  if (!user.is_author) throw httpError(403, '只有站长可以上传绘画作品。')
+  if (!uuidPattern.test(id)) throw httpError(404, '作品不存在。')
+  const { rows } = await pool.query('SELECT id FROM paintings WHERE id = $1 LIMIT 1', [id])
+  if (!rows.length) throw httpError(404, '作品不存在。')
+  const contentType = String(request.headers['content-type'] || '').toLowerCase().split(';')[0]
+  const extension = { 'image/webp': 'webp', 'image/jpeg': 'jpg' }[contentType]
+  if (!extension) throw httpError(415, '仅支持 WebP 或 JPEG 缩略图。')
+  const bytes = await readImage(request, 2 * 1024 * 1024)
+  if (!validImage(bytes, contentType)) throw httpError(415, '图片内容与文件类型不一致。')
+  const file = resolve(root, `${id}.thumb.${extension}`)
+  await mkdir(root, { recursive: true })
+  await writeFile(file, bytes, { flag: 'wx', mode: 0o600 })
+  sendJson(response, 201, { ok: true })
+}
+
 export async function handlePaintingRoute(request, response, url) {
   const { pathname } = url
   const method = request.method || 'GET'
-  const imageMatch = pathname.match(/^\/api\/public\/paintings\/([^/]+)\/image$/)
+  const imageMatch = pathname.match(/^\/api\/public\/paintings\/([^/]+)\/(image|thumbnail)$/)
+  const thumbnailUpload = pathname.match(/^\/api\/paintings\/([^/]+)\/thumbnail$/)
+  const detailsUpdate = pathname.match(/^\/api\/paintings\/([^/]+)$/)
   const recognized =
     (method === 'GET' && pathname === '/api/public/paintings') ||
     (method === 'GET' && !!imageMatch) ||
-    (method === 'POST' && pathname === '/api/paintings')
+    (method === 'POST' && (pathname === '/api/paintings' || !!thumbnailUpload)) ||
+    (method === 'PUT' && !!detailsUpdate)
   if (!recognized) return false
 
   try {
@@ -152,12 +228,14 @@ export async function handlePaintingRoute(request, response, url) {
       return true
     }
     if (method === 'GET' && imageMatch) {
-      await getPaintingImage(response, imageMatch[1])
+      await getPaintingImage(response, imageMatch[1], imageMatch[2] === 'thumbnail')
       return true
     }
     const user = await getAuthenticatedUser(request)
     if (!user) throw httpError(401, '请先登录。')
-    await uploadPainting(request, response, user)
+    if (detailsUpdate) await updatePaintingDetails(request, response, user, detailsUpdate[1])
+    else if (thumbnailUpload) await uploadThumbnail(request, response, user, thumbnailUpload[1])
+    else await uploadPainting(request, response, user)
     return true
   } catch (error) {
     const status = Number.isInteger(error.statusCode) ? error.statusCode : 503

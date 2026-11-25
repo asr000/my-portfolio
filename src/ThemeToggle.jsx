@@ -8,7 +8,7 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme
   document.documentElement.style.colorScheme = theme
   const color = document.querySelector('meta[name="theme-color"]')
-  if (color) color.content = theme === 'dark' ? '#1e3a52' : '#fbf7ef'
+  if (color) color.content = theme === 'dark' ? '#303030' : '#ffffff'
 }
 
 export default function ThemeToggle() {

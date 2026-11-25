@@ -74,11 +74,12 @@ export default function RecordEditor({ recordId }) {
       active = false
     }
   }, [auth.user?.id, recordId, attempt])
-  const returnTo = listReturn(
-    new URLSearchParams(window.location.search).get('back'),
-  )
+  const params = new URLSearchParams(window.location.search)
+  const returnTo = listReturn(params.get('back'))
+  const fromPublic = params.get('from') === 'public'
+  const fromList = params.get('from') === 'list'
   const back = recordId
-    ? recordLink(recordId, { back: returnTo, manage: true })
+    ? fromList ? returnTo : recordLink(recordId, { back: returnTo, manage: !fromPublic, publicView: fromPublic })
     : returnTo
   if (!loaded)
     return (
@@ -119,11 +120,13 @@ export default function RecordEditor({ recordId }) {
       key={`${loaded.user.id}:${recordId || 'new'}`}
       {...loaded}
       back={back}
+      fromPublic={fromPublic}
+      fromList={fromList}
     />
   )
 }
 
-function EditorForm({ user, record, draft, back }) {
+function EditorForm({ user, record, draft, back, fromPublic, fromList }) {
   const baseline = {
     title: record?.title || '',
     tags: record?.tags.join(', ') || '',
@@ -469,10 +472,11 @@ function EditorForm({ user, record, draft, back }) {
       setSaved(true)
       setPending(null)
       window.location.assign(
-        recordLink(result.record.id, {
+        fromList ? back : recordLink(result.record.id, {
           back: listReturn(
             new URLSearchParams(window.location.search).get('back'),
           ),
+          publicView: fromPublic && result.record.is_public,
           notice,
         }),
       )
@@ -502,7 +506,7 @@ function EditorForm({ user, record, draft, back }) {
     <main className="record-page">
       <PageTopbar
         back={back}
-        backLabel={`返回${record ? '记录管理' : '记录列表'}`}
+        backLabel={`返回${record ? (fromList ? '记录列表' : fromPublic ? '文章' : '记录管理') : '记录列表'}`}
         onBack={(e) => {
           if (!dirty || saved) return
           if (

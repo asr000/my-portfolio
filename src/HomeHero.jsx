@@ -68,30 +68,37 @@ function HeroContent({ auth }) {
   const [attempt, setAttempt] = useState(0)
   const [open, setOpen] = useState(false)
   useEffect(() => {
-    if (auth.status === 'loading' || auth.status === 'error') return
     let active = true
     let request = 0
-    const refresh = () => {
+    let pending = false
+    let lastRefresh = 0
+    const refresh = (force = false) => {
       if (document.visibilityState === 'hidden') return
+      if (pending || (!force && Date.now() - lastRefresh < 1000)) return
+      pending = true
+      lastRefresh = Date.now()
       const current = ++request
       apiGet('/api/progress').then((data) => {
         if (active && current === request) { setProgress(data); setMessage('') }
       }).catch((error) => {
         if (active && current === request) setMessage(fortuneError(error))
+      }).finally(() => {
+        if (current === request) pending = false
       })
     }
-    refresh()
+    refresh(true)
+    const refreshOnFocus = () => refresh()
     // Returning from publishing in another tab also refreshes the personal count.
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', refresh)
-    const timer = setInterval(refresh, 60000)
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnFocus)
+    const timer = setInterval(refreshOnFocus, 60000)
     return () => {
       active = false
       clearInterval(timer)
-      window.removeEventListener('focus', refresh)
-      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshOnFocus)
     }
-  }, [auth.status, attempt])
+  }, [attempt])
   const [before, after] = HERO_TITLE.split('0')
   return (
     <section className="hero home-hero" aria-label="代码生活">
@@ -120,5 +127,5 @@ function HeroContent({ auth }) {
 export default function HomeHero() {
   const auth = useAuth()
   // Account changes discard the previous user's count and any open daily draw.
-  return <HeroContent key={auth.user?.id || auth.status} auth={auth} />
+  return <HeroContent key={auth.user?.id || 'guest'} auth={auth} />
 }

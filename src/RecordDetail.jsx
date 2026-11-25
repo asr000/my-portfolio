@@ -357,6 +357,11 @@ export default function RecordDetail({ recordId, manage = false }) {
             <>
               {!pending && (
                 <div className="record-reading-tools">
+                  {!record.deleted_at && (
+                    <a className="record-create-link" href={recordLink(record.id, { back, edit: true })}>
+                      编辑记录
+                    </a>
+                  )}
                   <a className="text-link" href={manageHref}>
                     管理记录
                     <span className="record-management-hint">

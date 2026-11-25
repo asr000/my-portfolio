@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pool } from './db.js'
@@ -83,9 +83,7 @@ function imageUrl(row, kind, isPublic = false) {
   const field = imageFields[kind]
   const path = row?.[field.path]
   if (!path) return null
-  const version = row.updated_at instanceof Date
-    ? row.updated_at.getTime()
-    : Date.parse(row.updated_at || '') || 0
+  const version = createHash('sha256').update(path).digest('hex').slice(0, 24)
   const prefix = isPublic ? '/api/public/appearance/image' : '/api/appearance/image'
   return `${prefix}/${kind}?v=${version}`
 }
@@ -130,13 +128,32 @@ function safeFile(path) {
   return file
 }
 
-async function serveImage(response, row, kind, isPublic) {
+async function serveImage(request, response, row, kind, isPublic) {
   const field = imageFields[kind]
   const imagePath = row?.[field.path]
   const contentType = row?.[field.type]
   if (!imagePath || !contentType || typeByExtension[imagePath.split('.').at(-1)] !== contentType)
     throw httpError(404, '图片不存在。')
   const file = safeFile(imagePath)
+  const info = await stat(file).catch((error) => {
+    if (error.code === 'ENOENT') throw httpError(404, '图片不存在。')
+    throw error
+  })
+  if (!info.isFile()) throw httpError(404, '图片不存在。')
+  const version = createHash('sha256').update(imagePath).digest('hex').slice(0, 24)
+  const etag = `W/"${version}-${info.size}-${Math.trunc(info.mtimeMs)}"`
+  const headers = {
+    'Cache-Control': isPublic ? 'public, max-age=300' : 'private, no-cache',
+    ETag: etag,
+    'X-Content-Type-Options': 'nosniff',
+  }
+  const matches = String(request.headers['if-none-match'] || '')
+    .split(',').some((value) => value.trim() === etag || value.trim() === '*')
+  if (matches) {
+    response.writeHead(304, headers)
+    response.end()
+    return
+  }
   const bytes = await readFile(file).catch((error) => {
     if (error.code === 'ENOENT') throw httpError(404, '图片不存在。')
     throw error
@@ -144,8 +161,7 @@ async function serveImage(response, row, kind, isPublic) {
   response.writeHead(200, {
     'Content-Type': contentType,
     'Content-Length': String(bytes.length),
-    'Cache-Control': isPublic ? 'public, max-age=300' : 'private, no-store',
-    'X-Content-Type-Options': 'nosniff',
+    ...headers,
   })
   response.end(bytes)
 }
@@ -275,7 +291,7 @@ export async function handleAppearanceRoute(request, response, url) {
       return true
     }
     if (publicImage) {
-      await serveImage(response, await appearanceForAuthor(), publicImage[1], true)
+      await serveImage(request, response, await appearanceForAuthor(), publicImage[1], true)
       return true
     }
     const user = await getAuthenticatedUser(request)
@@ -285,7 +301,7 @@ export async function handleAppearanceRoute(request, response, url) {
       return true
     }
     if (method === 'GET' && privateImage) {
-      await serveImage(response, await appearanceForUser(user.id), privateImage[1], false)
+      await serveImage(request, response, await appearanceForUser(user.id), privateImage[1], false)
       return true
     }
     const imageMatch = pathname.match(new RegExp(`^/api/appearance/image/${imageKinds}$`))

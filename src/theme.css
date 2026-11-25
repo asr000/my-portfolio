@@ -1,7 +1,7 @@
 /* Cream, soft rose and butter yellow. A saved dark preference keeps the original palette. */
 :root {
   color-scheme: light;
-  --page-bg: #fbf7ef;
+  --page-bg: #ffffff;
   --text: #554a42;
   --text-strong: #493c35;
   --text-muted: #7a6a5e;
@@ -39,7 +39,7 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --page-bg: #1e3a52;
+  --page-bg: #303030;
   --text: #d8e5ed;
   --text-strong: #fdeeee;
   --text-muted: #9ca3af;

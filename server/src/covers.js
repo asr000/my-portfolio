@@ -156,6 +156,24 @@ async function getCover(request, response, encodedPath) {
     allowed = published.rows.length > 0
   }
   if (!allowed) throw httpError(404, '封面不存在或当前不可见。')
+  const info = await stat(file).catch((error) => {
+    if (error.code === 'ENOENT') throw httpError(404, '封面文件不存在。')
+    throw error
+  })
+  if (!info.isFile()) throw httpError(404, '封面文件不存在。')
+  const etag = `W/"${Buffer.from(path).toString('base64url')}-${info.size}-${Math.trunc(info.mtimeMs)}"`
+  const cacheHeaders = {
+    'Cache-Control': 'private, no-cache',
+    ETag: etag,
+    'X-Content-Type-Options': 'nosniff',
+  }
+  const matches = String(request.headers['if-none-match'] || '')
+    .split(',').some((value) => value.trim() === etag || value.trim() === '*')
+  if (matches) {
+    response.writeHead(304, cacheHeaders)
+    response.end()
+    return
+  }
   const bytes = await readFile(file).catch((error) => {
     if (error.code === 'ENOENT') throw httpError(404, '封面文件不存在。')
     throw error
@@ -163,8 +181,7 @@ async function getCover(request, response, encodedPath) {
   response.writeHead(200, {
     'Content-Type': contentType,
     'Content-Length': String(bytes.length),
-    'Cache-Control': 'private, no-store',
-    'X-Content-Type-Options': 'nosniff',
+    ...cacheHeaders,
   })
   response.end(bytes)
 }

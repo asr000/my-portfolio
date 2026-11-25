@@ -11,35 +11,48 @@ export default function AuthProvider({ children }) {
     message: '',
   })
   const generation = useRef(0)
+  const pending = useRef(null)
   const recovery = initialAuthCallback.recovery && !initialAuthCallback.failed
-  const refresh = useCallback(async () => {
+  const refresh = useCallback((force = false) => {
+    if (!force && pending.current) return pending.current
     const request = ++generation.current
-    try {
-      const user = await currentUser()
-      if (request === generation.current)
-        setState({ user, status: user ? 'ready' : 'signed-out', message: '' })
-    } catch (err) {
-      if (request === generation.current)
-        setState({
-          user: null,
-          status: isSessionError(err) ? 'signed-out' : 'error',
-          message: isSessionError(err)
-            ? '登录已过期，请重新登录。'
-            : errorText(err),
-        })
-    }
+    const task = (async () => {
+      try {
+        const user = await currentUser()
+        if (request === generation.current)
+          setState({ user, status: user ? 'ready' : 'signed-out', message: '' })
+      } catch (err) {
+        if (request === generation.current)
+          setState({
+            user: null,
+            status: isSessionError(err) ? 'signed-out' : 'error',
+            message: isSessionError(err)
+              ? '登录已过期，请重新登录。'
+              : errorText(err),
+          })
+      }
+    })()
+    pending.current = task
+    task.finally(() => { if (pending.current === task) pending.current = null })
+    return task
   }, [])
   const invalidate = useCallback(() => {
     generation.current++
+    pending.current = null
   }, [])
   const retry = useCallback(() => {
     setState((old) => ({ ...old, status: 'loading', message: '' }))
-    refresh()
+    return refresh(true)
   }, [refresh])
   useEffect(() => {
-    const initialCheck = setTimeout(refresh, 0)
+    const initialCheck = setTimeout(() => refresh(), 0)
+    let lastFocusRefresh = 0
     const refreshOnFocus = () => {
-      if (document.visibilityState === 'visible') refresh()
+      if (document.visibilityState !== 'visible') return
+      const now = Date.now()
+      if (now - lastFocusRefresh < 1000) return
+      lastFocusRefresh = now
+      refresh()
     }
     window.addEventListener('focus', refreshOnFocus)
     document.addEventListener('visibilitychange', refreshOnFocus)

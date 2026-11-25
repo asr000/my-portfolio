@@ -81,6 +81,7 @@ export default function SiteChrome() {
   const [cropRequest, setCropRequest] = useState(null)
   const dialog = useRef(null)
   const previewUrls = useRef([])
+  const pendingPublicAppearance = useRef(null)
 
   useEffect(() => {
     if (previewMode) {
@@ -89,6 +90,23 @@ export default function SiteChrome() {
       return undefined
     }
     if (auth.status === 'loading') {
+      if (!pendingPublicAppearance.current) {
+        const pending = loadAppearance({ publicView: true })
+          .then((saved) => {
+            // Start downloading the guest wallpaper while authentication is still pending.
+            if (pendingPublicAppearance.current === pending) {
+              const mobile = window.matchMedia('(max-width: 700px)').matches
+              const url = (mobile && saved?.mobile_wallpaper_url) || saved?.wallpaper_url
+              if (url) {
+                const image = new Image()
+                image.src = url
+              }
+            }
+            return saved
+          })
+          .catch(() => null)
+        pendingPublicAppearance.current = pending
+      }
       setLoadedFor(null)
       setAppearance(defaultUserAppearance)
       return undefined
@@ -100,7 +118,12 @@ export default function SiteChrome() {
     const defaults = userId ? defaultUserAppearance : defaultOwnerAppearance
     setLoadedFor(null)
     setAppearance(defaults)
-    loadAppearance({ publicView: !userId, signal: controller.signal })
+    const prefetched = !userId ? pendingPublicAppearance.current : null
+    pendingPublicAppearance.current = null
+    const request = prefetched
+      ? prefetched.then((result) => result || loadAppearance({ publicView: true, signal: controller.signal }))
+      : loadAppearance({ publicView: !userId, signal: controller.signal })
+    request
       .then((saved) => {
         if (!active) return
         setAppearance(fromServer(saved, defaults))

@@ -1,4 +1,5 @@
 import { pool } from './db.js'
+import { invalidatePublicLists } from './publicCache.js'
 import { getAuthenticatedUser } from './auth.js'
 import { discardImportedCover, saveImportedCover } from './covers.js'
 
@@ -415,9 +416,11 @@ export async function handlePrivateRecordRoute(request, response, url) {
   const { pathname, searchParams } = url
   const method = request.method || 'GET'
   const recordMatch = pathname.match(/^\/api\/records\/([^/]+)$/)
+  const editAccessMatch = pathname.match(/^\/api\/records\/([^/]+)\/edit-access$/)
   const recognized =
     (method === 'GET' && ['/api/note-access', '/api/record-tags', '/api/records'].includes(pathname)) ||
     (method === 'GET' && !!recordMatch) ||
+    (method === 'GET' && !!editAccessMatch) ||
     (method === 'POST' && pathname === '/api/records/mutate') ||
     (method === 'POST' && pathname === '/api/records/import') ||
     (method === 'GET' && pathname === '/api/note-profile') ||
@@ -446,6 +449,37 @@ export async function handlePrivateRecordRoute(request, response, url) {
       sendJson(response, 200, await listRecords(url, user))
       return true
     }
+    if (pathname === '/api/records/editable' && method === 'GET') {
+      const ids = (searchParams.get('ids') || '').split(',').filter(Boolean)
+      if (ids.length > 50 || ids.some((id) => !uuidPattern.test(id)))
+        throw httpError(400, '记录编号无效。')
+      const access = await accessFor(user)
+      if (!ids.length || !access.can_write) {
+        sendJson(response, 200, { ids: [] })
+        return true
+      }
+      const { rows } = await pool.query(
+        'SELECT id FROM records WHERE user_id = $1 AND deleted_at IS NULL AND id = ANY($2::uuid[])',
+        [user.id, ids],
+      )
+      sendJson(response, 200, { ids: rows.map((row) => row.id) })
+      return true
+    }
+    if (editAccessMatch && method === 'GET') {
+      const id = editAccessMatch[1]
+      if (!uuidPattern.test(id)) throw httpError(400, '记录编号无效。')
+      const access = await accessFor(user)
+      if (!access.can_write) {
+        sendJson(response, 200, { can_edit: false })
+        return true
+      }
+      const { rows } = await pool.query(
+        'SELECT 1 FROM records WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL LIMIT 1',
+        [id, user.id],
+      )
+      sendJson(response, 200, { can_edit: rows.length > 0 })
+      return true
+    }
     if (recordMatch && method === 'GET') {
       const id = recordMatch[1]
       if (!uuidPattern.test(id)) throw httpError(400, '记录编号无效。')
@@ -458,11 +492,13 @@ export async function handlePrivateRecordRoute(request, response, url) {
     }
     if (pathname === '/api/records/mutate' && method === 'POST') {
       const result = await mutateRecord(user, await readJson(request))
+      invalidatePublicLists()
       sendJson(response, 200, result)
       return true
     }
     if (pathname === '/api/records/import' && method === 'POST') {
       const result = await importRecord(user, await readImportJson(request))
+      invalidatePublicLists()
       sendJson(response, 200, result)
       return true
     }
@@ -495,6 +531,7 @@ export async function handlePrivateRecordRoute(request, response, url) {
          ON CONFLICT (user_id) DO UPDATE SET display_name = EXCLUDED.display_name`,
         [user.id, name],
       )
+      invalidatePublicLists()
       sendJson(response, 200, {
         display_name: name,
         author_role: access.is_author ? 'owner' : 'member',

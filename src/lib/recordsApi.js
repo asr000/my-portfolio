@@ -138,7 +138,6 @@ export async function coverExists(path) {
 export async function coverUrl(path) {
   const response = await fetch(`/api/covers/${encodeURIComponent(path)}`, {
     credentials: 'include',
-    cache: 'no-store',
   })
   if (!response.ok) throw new Error('封面读取失败。')
   return URL.createObjectURL(await response.blob())

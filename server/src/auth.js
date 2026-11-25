@@ -7,6 +7,7 @@ import {
 } from 'node:crypto'
 import { promisify } from 'node:util'
 import { pool } from './db.js'
+import { invalidatePublicLists } from './publicCache.js'
 import { sendAuthEmail } from './email.js'
 
 const scrypt = promisify(scryptCallback)
@@ -392,6 +393,7 @@ export async function handleAuthRoute(request, response, url) {
       if (limited(`register:${ip}`, 5, 60 * 60 * 1000))
         throw httpError(429, '注册请求过于频繁，请稍后重试。')
       await register(body)
+      invalidatePublicLists()
       sendJson(response, 202, {
         message: '如果邮箱可以注册，验证邮件会发送到邮箱。',
       })
@@ -440,6 +442,7 @@ export async function handleAuthRoute(request, response, url) {
 
     if (pathname === '/api/auth/verify-email') {
       await verifyEmail(typeof body.token === 'string' ? body.token : '')
+      invalidatePublicLists()
       sendJson(response, 200, { ok: true })
       return true
     }

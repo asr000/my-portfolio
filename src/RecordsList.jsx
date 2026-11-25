@@ -9,6 +9,9 @@ import { recordLink } from './lib/navigation.js'
 import RecordThumbnail from './RecordThumbnail.jsx'
 import HelpHint from './HelpHint.jsx'
 import RecordSource from './RecordSource.jsx'
+import { useAuth } from './lib/authContext.js'
+import { useNoteAccess } from './lib/useNoteAccess.js'
+import { apiGet } from './lib/apiClient.js'
 
 export default function RecordsList({
   query = '',
@@ -18,6 +21,11 @@ export default function RecordsList({
   publicView = false,
   returnTo = '/?view=records',
 }) {
+  const auth = useAuth()
+  const noteAccess = useNoteAccess()
+  const userId = auth.status === 'ready' ? auth.user?.id : null
+  const canWrite = !!userId && !!noteAccess.data?.can_write
+  const [editable, setEditable] = useState(null)
   const pageSize = PAGE_SIZE
   const [records, setRecords] = useState([])
   const [busy, setBusy] = useState(true)
@@ -26,6 +34,20 @@ export default function RecordsList({
   const [attempt, setAttempt] = useState(0)
   const active = useRef(true)
   const loading = useRef(false)
+  const recordIds = records.map((record) => record.id).join(',')
+  useEffect(() => {
+    if (!publicView || !canWrite || !recordIds) return undefined
+    const controller = new AbortController()
+    const ids = recordIds.split(',')
+    const batches = []
+    for (let index = 0; index < ids.length; index += 50) batches.push(ids.slice(index, index + 50))
+    Promise.all(batches.map((batch) =>
+      apiGet(`/api/records/editable?${new URLSearchParams({ ids: batch.join(',') })}`, { signal: controller.signal }),
+    ))
+      .then((results) => setEditable({ userId, recordIds, ids: results.flatMap((result) => result.ids) }))
+      .catch(() => {})
+    return () => controller.abort()
+  }, [publicView, canWrite, userId, recordIds])
   async function fetchPage(last) {
     if (publicView) {
       return listPublicRecords({
@@ -116,11 +138,14 @@ export default function RecordsList({
             : undefined
         }
       >
-        {records.map((record) => (
+        {records.map((record) => {
+          const canEdit = canWrite && !trash && (!publicView ||
+            (editable?.userId === userId && editable.recordIds === recordIds && editable.ids.includes(record.id)))
+          return (
+          <div className={`record-card-wrap${canEdit ? ' record-card-has-edit' : ''}`} key={record.id}>
           <a
             className="record-card"
             href={recordLink(record.id, { back: returnTo, publicView })}
-            key={record.id}
           >
             <RecordThumbnail
               key={record.cover_path || record.id}
@@ -142,7 +167,13 @@ export default function RecordsList({
               </time>
             </span>
           </a>
-        ))}
+          {canEdit && (
+            <a className="record-card-edit" aria-label={`编辑 ${record.title}`} href={recordLink(record.id, { back: returnTo, edit: true, fromList: true })}>
+              编辑
+            </a>
+          )}
+          </div>
+        )})}
       </div>
       {preview && !!records.length && (
         <div className="scroll-hint">

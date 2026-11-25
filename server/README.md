@@ -34,5 +34,7 @@ Each account imports its own JSON or ZIP export from the site's Data Backup page
 - Registration and password recovery require the configured SMTP server.
 - Cover files are local files; back up `/var/lib/portfolio-api/covers` along with PostgreSQL.
 - Painting files are local files; run `server/migrations/002_paintings.sql` once on the production database and create `/var/lib/portfolio-api/paintings` owned by `tap000` before deploying the gallery API. Back up this directory along with PostgreSQL.
+- Run `server/migrations/006_painting_details.sql` before deploying the API version that supports painting duration, stroke count, and descriptions; existing paintings keep their images and start with empty details.
+- Run `server/migrations/007_site_about.sql` before deploying the editable homepage introduction. Its content is stored in PostgreSQL.
 - User wallpapers and avatars are stored under `/var/lib/portfolio-api/appearance`; run `server/migrations/003_user_appearance.sql` once on the production database and create this directory owned by `tap000` before deploying account-synced themes. Back up this directory along with PostgreSQL.
 - Configure regular PostgreSQL backups and a server restore procedure before relying on this as the only copy of the records.

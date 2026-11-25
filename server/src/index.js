@@ -8,6 +8,7 @@ import { handleCoverRoute } from './covers.js'
 import { handleDailyRoute } from './daily.js'
 import { handlePaintingRoute } from './paintings.js'
 import { handleAppearanceRoute } from './appearance.js'
+import { handleSiteAbout } from './siteAbout.js'
 
 const port = Number(process.env.PORT || 3001)
 
@@ -16,6 +17,11 @@ const server = createServer(async (request, response) => {
 
   response.setHeader('Cache-Control', 'no-store')
   response.setHeader('Content-Type', 'application/json; charset=utf-8')
+
+  // Only anonymous, publicly available GET routes may be read cross-origin.
+  if (request.method === 'GET' && path.startsWith('/api/public/')) {
+    response.setHeader('Access-Control-Allow-Origin', '*')
+  }
 
   if (request.method === 'GET' && path === '/api/health') {
     try {
@@ -37,6 +43,10 @@ const server = createServer(async (request, response) => {
     }
     return
   }
+
+  if (
+    await handleSiteAbout(request, response, new URL(request.url || '/', 'http://localhost'))
+  ) return
 
   if (
     await handleAuthRoute(

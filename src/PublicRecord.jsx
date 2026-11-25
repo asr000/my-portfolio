@@ -5,14 +5,20 @@ import { listReturn, loginLink } from './lib/navigation.js'
 import RecordsLayout from './RecordsLayout.jsx'
 import RecordSource from './RecordSource.jsx'
 import RecordCoverHero from './RecordCoverHero.jsx'
+import { useAuth } from './lib/authContext.js'
+import { apiGet } from './lib/apiClient.js'
+import { recordLink } from './lib/navigation.js'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 
 export default function PublicRecord({ recordId }) {
+  const auth = useAuth()
+  const userId = auth.user?.id
   const [record, setRecord] = useState(null)
   const [status, setStatus] = useState('loading')
   const [message, setMessage] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const [editAccess, setEditAccess] = useState(null)
   const back = listReturn(
     new URLSearchParams(window.location.search).get('back'),
     'showcase',
@@ -35,6 +41,16 @@ export default function PublicRecord({ recordId }) {
       active = false
     }
   }, [recordId, attempt])
+  useEffect(() => {
+    if (auth.status !== 'ready' || !userId) return undefined
+    const controller = new AbortController()
+    apiGet(`/api/records/${encodeURIComponent(recordId)}/edit-access`, { signal: controller.signal })
+      .then((result) => setEditAccess({ userId, recordId, allowed: result.can_edit }))
+      .catch(() => {})
+    return () => controller.abort()
+  }, [auth.status, userId, recordId])
+  const canEdit = auth.status === 'ready' && auth.user &&
+    editAccess?.userId === auth.user.id && editAccess.recordId === recordId && editAccess.allowed
   return (
     <RecordsLayout
       publicPage
@@ -45,7 +61,7 @@ export default function PublicRecord({ recordId }) {
           : '公开的项目与学习记录。'
       }
       back={back}
-      backLabel="返回练习展示"
+      backLabel="返回博客记录"
     >
       {status === 'loading' && <p role="status">正在读取练习…</p>}
       {status === 'error' && (
@@ -68,6 +84,13 @@ export default function PublicRecord({ recordId }) {
       {status === 'ready' && record && (
         <article className="record-article public-record-article">
           <RecordCoverHero coverPath={record.cover_path} publicAccess />
+          {canEdit && (
+            <div className="record-reading-tools">
+              <a className="record-create-link" href={recordLink(recordId, { back, edit: true, fromPublic: true })}>
+                编辑记录
+              </a>
+            </div>
+          )}
           <p className="public-record-source">
             <RecordSource record={record} />
           </p>

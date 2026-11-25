@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { pool } from './db.js'
+import { invalidatePublicLists } from './publicCache.js'
 import { getAuthenticatedUser } from './auth.js'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -249,6 +250,7 @@ export async function handleInvitationRoute(request, response, url) {
     if (method === 'POST' && pathname === '/api/invitations/redeem') {
       const body = await readJson(request)
       const result = await redeemInvitation(user, body.code)
+      invalidatePublicLists()
       sendJson(response, 200, result)
       return true
     }

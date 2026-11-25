@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from './lib/authContext.js'
 import PageTopbar from './PageTopbar.jsx'
-import { listPaintings, uploadPainting } from './lib/paintingsApi.js'
+import { listPaintings, updatePaintingDetails, uploadPainting } from './lib/paintingsApi.js'
 import HelpHint from './HelpHint.jsx'
 import './paintingsPage.css'
 
@@ -13,6 +13,9 @@ const previewPaintings = [
   {
     id: 'preview-sunset',
     title: '晚风写给山海',
+    duration_text: '2 小时 30 分钟',
+    stroke_count: 1280,
+    description: '用晚霞和海面的颜色，记录一天结束时的安静。',
     image_url: svgImage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1000"><defs><linearGradient id="s" x2="0" y2="1"><stop stop-color="#f5b49d"/><stop offset=".55" stop-color="#f8d9a9"/><stop offset="1" stop-color="#9fc9c1"/></linearGradient><linearGradient id="w" x2="0" y2="1"><stop stop-color="#779eac"/><stop offset="1" stop-color="#395b70"/></linearGradient></defs><rect width="1500" height="1000" fill="url(#s)"/><circle cx="1100" cy="250" r="132" fill="#fff1bd"/><path d="M0 650 260 430l210 190 220-290 260 330 210-205 340 240v305H0Z" fill="#a8818f"/><path d="m0 760 290-170 250 132 255-196 245 200 210-128 250 154v248H0Z" fill="#617e8a"/><path d="M0 770c225-85 362 38 560-8s355-67 510 2 274 64 430 10v226H0Z" fill="url(#w)"/><g fill="#f8e8cf" opacity=".8"><circle cx="250" cy="210" r="4"/><circle cx="390" cy="280" r="6"/><circle cx="770" cy="175" r="4"/><circle cx="680" cy="300" r="5"/><circle cx="1360" cy="160" r="4"/></g><path d="M180 1000c80-110 90-208 54-293m64 293c-23-160 1-274 80-363m-29 364c61-114 142-169 234-166" fill="none" stroke="#395b70" stroke-width="8" stroke-linecap="round" opacity=".65"/></svg>`),
   },
   {
@@ -24,6 +27,78 @@ const previewPaintings = [
 
 function titleFromFile(file) {
   return file.name.replace(/\.[^.]+$/, '').trim().slice(0, 120) || '未命名作品'
+}
+
+function PaintingDetails({ painting, canManage, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [duration, setDuration] = useState(painting.duration_text || '')
+  const [strokes, setStrokes] = useState(painting.stroke_count == null ? '' : String(painting.stroke_count))
+  const [description, setDescription] = useState(painting.description || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function cancel() {
+    setDuration(painting.duration_text || '')
+    setStrokes(painting.stroke_count == null ? '' : String(painting.stroke_count))
+    setDescription(painting.description || '')
+    setError('')
+    setEditing(false)
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+    if (saving) return
+    const count = strokes.trim() === '' ? null : Number(strokes)
+    if (count !== null && (!Number.isInteger(count) || count < 0 || count > 2147483647)) {
+      setError('笔数请输入有效的非负整数。')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await onSave(painting.id, {
+        duration_text: duration.trim(),
+        stroke_count: count,
+        description: description.trim(),
+      })
+      setEditing(false)
+    } catch (saveError) {
+      setError(saveError.message || '作品说明保存失败，请重试。')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="painting-details">
+      <div className="painting-details-heading">
+        <h2>作品说明</h2>
+        {canManage && !editing && <button type="button" onClick={() => setEditing(true)}>编辑说明</button>}
+      </div>
+      {editing ? (
+        <form className="painting-details-form" onSubmit={submit}>
+          <div className="painting-details-fields">
+            <label>时长<input value={duration} onChange={(event) => setDuration(event.target.value)} maxLength={40} placeholder="例如 2 小时 30 分钟" /></label>
+            <label>笔数<input type="number" inputMode="numeric" min="0" max="2147483647" step="1" value={strokes} onChange={(event) => setStrokes(event.target.value)} placeholder="例如 1280" /></label>
+          </div>
+          <label>内容简述<textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} rows={4} placeholder="写一点关于这幅作品的想法…" /></label>
+          {error && <p className="painting-details-error" role="alert">{error}</p>}
+          <div className="painting-details-actions">
+            <button type="button" onClick={cancel} disabled={saving}>取消</button>
+            <button type="submit" disabled={saving}>{saving ? '保存中…' : '保存说明'}</button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <dl className="painting-details-meta">
+            {painting.duration_text && <div><dt>时长</dt><dd>{painting.duration_text}</dd></div>}
+            {painting.stroke_count != null && <div><dt>笔数</dt><dd>{painting.stroke_count.toLocaleString('zh-CN')}</dd></div>}
+          </dl>
+          {painting.description ? <p className="painting-details-description">{painting.description}</p> : <p className="painting-details-empty">暂无内容简述。</p>}
+        </>
+      )}
+    </div>
+  )
 }
 
 async function compressPainting(file) {
@@ -38,15 +113,22 @@ async function compressPainting(file) {
     canvas.width = Math.max(1, Math.round(bitmap.width * scale))
     canvas.height = Math.max(1, Math.round(bitmap.height * scale))
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    const toBlob = (type, quality) =>
-      new Promise((resolve) => canvas.toBlob(resolve, type, quality))
-    const webp = await toBlob('image/webp', 0.88)
-    if (webp?.type === 'image/webp' && webp.size <= 7 * 1024 * 1024)
-      return webp
-    const jpeg = await toBlob('image/jpeg', 0.84)
-    if (!jpeg || jpeg.size > 7 * 1024 * 1024)
+    const toBlob = (source, type, quality) =>
+      new Promise((resolve) => source.toBlob(resolve, type, quality))
+    const webp = await toBlob(canvas, 'image/webp', 0.88)
+    const original = webp?.type === 'image/webp' && webp.size <= 7 * 1024 * 1024
+      ? webp : await toBlob(canvas, 'image/jpeg', 0.84)
+    if (!original || original.size > 7 * 1024 * 1024)
       throw new Error('压缩后的图片仍超过 7 MB。')
-    return jpeg
+    const thumbnailCanvas = document.createElement('canvas')
+    const thumbnailScale = Math.min(1, 1000 / Math.max(canvas.width, canvas.height))
+    thumbnailCanvas.width = Math.max(1, Math.round(canvas.width * thumbnailScale))
+    thumbnailCanvas.height = Math.max(1, Math.round(canvas.height * thumbnailScale))
+    thumbnailCanvas.getContext('2d').drawImage(canvas, 0, 0, thumbnailCanvas.width, thumbnailCanvas.height)
+    const thumbnailWebp = await toBlob(thumbnailCanvas, 'image/webp', 0.75)
+    const thumbnail = thumbnailWebp?.type === 'image/webp'
+      ? thumbnailWebp : await toBlob(thumbnailCanvas, 'image/jpeg', 0.75)
+    return { original, thumbnail }
   } finally {
     bitmap.close()
   }
@@ -119,28 +201,35 @@ export default function PaintingsPage() {
     setError('')
     setUploadMessage('')
     let completed = 0
+    let thumbnailFailures = 0
     try {
       const added = []
       for (const file of files) {
-        const image = await compressPainting(file)
+        const { original, thumbnail } = await compressPainting(file)
         if (previewMode) {
-          const imageUrl = URL.createObjectURL(image)
+          const imageUrl = URL.createObjectURL(original)
+          const thumbnailUrl = thumbnail ? URL.createObjectURL(thumbnail) : imageUrl
           previewObjectUrls.current.push(imageUrl)
+          if (thumbnailUrl !== imageUrl) previewObjectUrls.current.push(thumbnailUrl)
           added.push({
             id: `local-${crypto.randomUUID()}`,
             title: titleFromFile(file),
             image_url: imageUrl,
+            thumbnail_url: thumbnailUrl,
           })
         } else {
-          const item = await uploadPainting(image, titleFromFile(file))
+          const item = await uploadPainting(original, titleFromFile(file), undefined, thumbnail)
           added.push(item)
+          if (item.thumbnail_failed) thumbnailFailures += 1
         }
         completed += 1
         setUploadMessage(`已处理 ${completed}/${files.length} 张`)
       }
       setPaintings((items) => [...added.reverse(), ...items])
       setActiveIndex(0)
-      setUploadMessage(previewMode ? '作品已加入本地预览。' : '作品已添加。')
+      setUploadMessage(previewMode ? '作品已加入本地预览。' : thumbnailFailures
+        ? `作品已添加，其中 ${thumbnailFailures} 张缩略图未保存，将显示原图。`
+        : '作品已添加。')
     } catch (uploadError) {
       setError(uploadError.message || '作品上传失败。')
     } finally {
@@ -158,6 +247,11 @@ export default function PaintingsPage() {
   function openLarge(index) {
     setActiveIndex(index)
     setLightboxOpen(true)
+  }
+
+  async function saveDetails(id, details) {
+    const updated = previewMode ? { id, ...details } : await updatePaintingDetails(id, details)
+    setPaintings((items) => items.map((item) => item.id === id ? { ...item, ...updated } : item))
   }
 
   function handleGalleryKey(event) {
@@ -238,7 +332,9 @@ export default function PaintingsPage() {
                       onClick={() => openLarge(index)}
                       aria-label={`点击查看大图：${painting.title}`}
                     >
-                      <img src={painting.image_url} alt={painting.title} draggable="false" />
+                      {(index === activeIndex || index === (activeIndex + 1) % paintings.length || index === (activeIndex - 1 + paintings.length) % paintings.length) && (
+                        <img src={painting.thumbnail_url || painting.image_url} alt={painting.title} draggable="false" decoding="async" />
+                      )}
                       <span className="painting-zoom-hint" aria-hidden="true">放大</span>
                     </button>
                     <figcaption>
@@ -272,6 +368,7 @@ export default function PaintingsPage() {
                 <span aria-live="polite">{activeIndex + 1} / {paintings.length}</span>
               </div>
             )}
+            <PaintingDetails key={current.id} painting={current} canManage={canManage} onSave={saveDetails} />
           </section>
         ) : (
           <div className="painting-empty" role={error ? 'status' : undefined}>
@@ -290,7 +387,7 @@ export default function PaintingsPage() {
         onCancel={(event) => { event.preventDefault(); setLightboxOpen(false) }}
         onClick={(event) => { if (event.target === lightbox.current) setLightboxOpen(false) }}
       >
-        {current && (
+        {current && lightboxOpen && (
           <>
             <div className="painting-lightbox-toolbar">
               <span>{current.title}</span>

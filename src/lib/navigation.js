@@ -24,12 +24,17 @@ export function listReturn(value, fallback = 'records') {
 
 export function recordLink(
   id,
-  { back, manage = false, edit = false, publicView = false, notice } = {},
+  { back, manage = false, edit = false, publicView = false, fromPublic = false, fromList = false, notice } = {},
 ) {
-  if (publicView)
-    return `/?${new URLSearchParams({ show: id, back: listReturn(back, 'showcase') })}`
+  if (publicView) {
+    const params = new URLSearchParams({ show: id, back: listReturn(back, 'showcase') })
+    if (notice) params.set('notice', notice)
+    return `/?${params}`
+  }
   const params = new URLSearchParams({ [edit ? 'edit' : 'record']: id })
   if (manage) params.set('manage', '1')
+  if (edit && fromPublic) params.set('from', 'public')
+  if (edit && fromList) params.set('from', 'list')
   params.set('back', listReturn(back))
   if (notice) params.set('notice', notice)
   return `/?${params}`

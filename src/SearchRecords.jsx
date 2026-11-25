@@ -7,7 +7,7 @@ import RecordsList from './RecordsList.jsx'
 export default function SearchRecords({ publicView = false }) {
   return (
     <RecordsLayout
-      title={publicView ? '练习展示' : '搜索记录'}
+      title={publicView ? '博客记录' : '搜索记录'}
       description={
         publicView
           ? '网站作者与受邀作者公开的项目和学习记录，无需登录即可阅读。'

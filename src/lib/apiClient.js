@@ -1,5 +1,28 @@
 import { fetchWithTimeout } from './http.js'
 
+const directPublicPaths = /^\/api\/public\/(?:records(?:\/[0-9a-f-]+)?|tags|paintings|appearance)(?:\?|$)/i
+const directApiOrigin = 'https://api.ars000.top'
+
+async function requestPublicDirect(path, options) {
+  const controller = new AbortController()
+  const abort = () => controller.abort(options.signal.reason)
+  if (options.signal?.aborted) abort()
+  else options.signal?.addEventListener('abort', abort, { once: true })
+  const timer = setTimeout(() => controller.abort(), 5000)
+  try {
+    const response = await fetchWithTimeout(`${directApiOrigin}${path}`, {
+      ...options,
+      credentials: 'omit',
+      signal: controller.signal,
+    })
+    if (response.status >= 500) throw new Error('公开接口暂不可用。')
+    return response
+  } finally {
+    clearTimeout(timer)
+    options.signal?.removeEventListener('abort', abort)
+  }
+}
+
 export async function apiRequest(path, { method = 'GET', body, signal } = {}) {
   const headers = { Accept: 'application/json' }
   const options = {
@@ -15,11 +38,22 @@ export async function apiRequest(path, { method = 'GET', body, signal } = {}) {
 
   let response
   try {
-    response = await fetchWithTimeout(path, options)
+    const direct = method === 'GET' && directPublicPaths.test(path) &&
+      typeof window !== 'undefined' && window.location.origin === 'https://re-code-life.netlify.app'
+    if (direct) {
+      try {
+        response = await requestPublicDirect(path, options)
+      } catch (error) {
+        if (signal?.aborted) throw error
+        response = await fetchWithTimeout(path, options)
+      }
+    } else {
+      response = await fetchWithTimeout(path, options)
+    }
   } catch (error) {
     if (signal?.aborted) throw signal.reason || error
     if (error?.name === 'AbortError') throw error
-    throw new Error('无法连接笔记服务，请检查网络后重试。')
+    throw new Error('无法连接笔记服务，请检查网络后重试。', { cause: error })
   }
 
   const text = await response.text()
