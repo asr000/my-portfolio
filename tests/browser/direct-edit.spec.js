@@ -20,7 +20,13 @@ async function setup(page, { signedOut = false, allowed = true } = {}) {
     if (path === `/api/records/${id}`) return json(record)
     if (path === '/api/records/mutate') {
       const payload = request.postDataJSON()
-      record = { ...record, title: payload.title, content: payload.content, tags: payload.tags, version: 2 }
+      if (payload.version !== record.version) return json({ code: '40001', error: '版本冲突' }, 409)
+      if (payload.action === 'publish' || payload.action === 'unpublish')
+        record = { ...record, is_public: payload.action === 'publish', version: record.version + 1 }
+      else if (payload.action === 'trash')
+        record = { ...record, deleted_at: new Date().toISOString(), is_public: false, version: record.version + 1 }
+      else
+        record = { ...record, title: payload.title, content: payload.content, tags: payload.tags, version: record.version + 1 }
       return json({ record, old_cover_path: null })
     }
     return json({})
@@ -82,4 +88,35 @@ test('the list edit link fits on a narrow screen', async ({ page }) => {
   expect(box.x).toBeGreaterThanOrEqual(0)
   expect(box.x + box.width).toBeLessThanOrEqual(375)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
+})
+
+test('the reading page has one edit entry and visibility is managed in the editor', async ({ page }) => {
+  await setup(page)
+  await page.goto(`/?record=${id}&back=%2F%3Fview%3Drecords`)
+  await expect(page.getByRole('link', { name: '编辑记录' })).toHaveCount(1)
+  await expect(page.getByRole('link', { name: /管理记录/ })).toHaveCount(0)
+  await page.getByRole('link', { name: '编辑记录' }).click()
+  await expect(page.getByText('当前已公开')).toBeVisible()
+  await page.getByLabel('标题').fill('未保存的修改')
+  await expect(page.getByRole('button', { name: '取消公开' })).toBeDisabled()
+  await expect(page.getByText('请先保存修改，再更改公开状态或移入回收站。')).toBeVisible()
+  await page.getByLabel('标题').fill('预览文章')
+  await page.getByRole('button', { name: '取消公开' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '取消公开' }).click()
+  await expect(page.getByText('当前仅自己可见')).toBeVisible()
+  await page.getByRole('button', { name: '公开展示' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '确认公开' }).click()
+  await expect(page.getByText('当前已公开')).toBeVisible()
+  await page.getByLabel('标题').fill('操作后的保存')
+  await page.getByRole('button', { name: '保存修改' }).click()
+  await expect(page.getByRole('heading', { name: '操作后的保存' })).toBeVisible()
+})
+
+test('the editor keeps a recoverable trash action', async ({ page }) => {
+  await setup(page)
+  await page.goto(`/?edit=${id}&from=list&back=%2F%3Fview%3Drecords`)
+  await page.getByRole('button', { name: '移入回收站' }).click()
+  await expect(page.getByRole('dialog')).toContainText('可以在回收站恢复')
+  await page.getByRole('dialog').getByRole('button', { name: '移入回收站' }).click()
+  await expect(page).toHaveURL(/view=records/)
 })

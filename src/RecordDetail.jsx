@@ -362,13 +362,11 @@ export default function RecordDetail({ recordId, manage = false }) {
                       编辑记录
                     </a>
                   )}
-                  <a className="text-link" href={manageHref}>
-                    管理记录
-                    <span className="record-management-hint">
-                      {record.deleted_at ? '恢复 / 彻底删除' : '编辑 / 删除'}
-                    </span>{' '}
-                    →
-                  </a>
+                  {record.deleted_at && (
+                    <a className="text-link" href={manageHref}>
+                      管理回收站记录 →
+                    </a>
+                  )}
                 </div>
               )}
               <div className="record-tags">

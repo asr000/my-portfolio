@@ -28,6 +28,7 @@ import { listReturn, loginLink, recordLink } from './lib/navigation.js'
 import PageTopbar from './PageTopbar.jsx'
 import { useAuth } from './lib/authContext.js'
 import HelpHint from './HelpHint.jsx'
+import ConfirmDialog from './ConfirmDialog.jsx'
 
 const MarkdownContent = lazy(() => import('./MarkdownContent.jsx'))
 const pendingRecordLoads = new Map()
@@ -79,7 +80,7 @@ export default function RecordEditor({ recordId }) {
   const fromPublic = params.get('from') === 'public'
   const fromList = params.get('from') === 'list'
   const back = recordId
-    ? fromList ? returnTo : recordLink(recordId, { back: returnTo, manage: !fromPublic, publicView: fromPublic })
+    ? fromList ? returnTo : recordLink(recordId, { back: returnTo, publicView: fromPublic })
     : returnTo
   if (!loaded)
     return (
@@ -139,6 +140,12 @@ function EditorForm({ user, record, draft, back, fromPublic, fromList }) {
     () => draft?.recordId || record?.id || crypto.randomUUID(),
   )
   const [baseVersion, setBaseVersion] = useState(record?.version ?? null)
+  const [isPublic, setIsPublic] = useState(!!record?.is_public)
+  const [actionPending, setActionPending] = useState(() => record ? readLocal(`action:${user.id}:${record.id}`) : null)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [actionMessage, setActionMessage] = useState('')
+  const [actionDialog, setActionDialog] = useState(null)
+  const actionLock = useRef(false)
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState('')
   const [uploadedPath, setUploadedPath] = useState(null)
@@ -164,7 +171,7 @@ function EditorForm({ user, record, draft, back, fromPublic, fromList }) {
     !!uploadedPath ||
     !!pending ||
     imageBusy
-  const disabled = busy || !!pending || !!candidate
+  const disabled = busy || !!pending || !!candidate || actionBusy || !!actionPending
   const lastDraft = useRef(null)
   useEffect(() => {
     lastDraft.current =
@@ -502,11 +509,52 @@ function EditorForm({ user, record, draft, back, fromPublic, fromList }) {
       setBusy(false)
     }
   }
+  async function runRecordAction(action) {
+    if (actionLock.current || !record) return
+    actionLock.current = true
+    setActionBusy(true)
+    setActionMessage('')
+    const actionKey = `action:${user.id}:${record.id}`
+    const request = actionPending || {
+      requestId: crypto.randomUUID(), action, recordId: record.id, version: baseVersion,
+    }
+    try {
+      const verified = await currentUser()
+      if (verified?.id !== user.id) throw new Error('账号状态已变化，请重新登录。')
+      writeLocal(actionKey, request)
+      setActionPending(request)
+      const result = await mutateRecord(request)
+      removeLocal(actionKey)
+      setActionPending(null)
+      setActionDialog(null)
+      if (request.action === 'trash') {
+        window.location.assign(listReturn(new URLSearchParams(window.location.search).get('back')))
+        return
+      }
+      setBaseVersion(result.record.version)
+      setIsPublic(!!result.record.is_public)
+      setActionMessage(result.record.is_public ? '记录已公开。' : '记录已取消公开。')
+    } catch (error) {
+      const definiteFailure = !!error.code ||
+        (error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status))
+      if (definiteFailure) {
+        setActionPending(null)
+        try { removeLocal(actionKey) } catch { /* keep the retry receipt */ }
+      }
+      setActionDialog(null)
+      setActionMessage(error.code === '40001'
+        ? '记录已在其他页面或设备修改，请刷新页面后重试。'
+        : `${errorText(error)}${!definiteFailure ? ' 如结果不确定，请重试上次操作。' : ''}`)
+    } finally {
+      actionLock.current = false
+      setActionBusy(false)
+    }
+  }
   return (
     <main className="record-page">
       <PageTopbar
         back={back}
-        backLabel={`返回${record ? (fromList ? '记录列表' : fromPublic ? '文章' : '记录管理') : '记录列表'}`}
+        backLabel={`返回${record ? (fromList ? '记录列表' : '文章') : '记录列表'}`}
         onBack={(e) => {
           if (!dirty || saved) return
           if (
@@ -530,9 +578,9 @@ function EditorForm({ user, record, draft, back, fromPublic, fromList }) {
         <div className="record-editor-heading">
           <h1>{record ? '编辑记录' : '新增记录'}</h1>
           <HelpHint align="start">
-            {record?.is_public
+            {isPublic
               ? '这条记录已公开，保存的修改也会更新公开内容。'
-              : '记录默认仅自己可见。保存后可在记录管理页选择公开展示。'}
+              : '记录默认仅自己可见。保存后可以选择公开展示。'}
           </HelpHint>
         </div>
         {candidate && (
@@ -671,7 +719,7 @@ function EditorForm({ user, record, draft, back, fromPublic, fromList }) {
           <div className="actions">
             <button
               className="login-submit"
-              disabled={busy || imageBusy || !!candidate}
+              disabled={busy || imageBusy || !!candidate || actionBusy || !!actionPending}
               type="submit"
             >
               {busy
@@ -691,7 +739,48 @@ function EditorForm({ user, record, draft, back, fromPublic, fromList }) {
             草稿仅保存在当前设备浏览器中，按账号隔离；不会同步到其他设备。
           </HelpHint>
         </form>
+        {record && (
+          <section className="publication-settings editor-publication" aria-label="公开设置">
+            <h2>公开设置</h2>
+            <p>{isPublic ? '当前已公开' : '当前仅自己可见'}</p>
+            {(dirty || candidate || pending || imageBusy) && !actionPending && (
+              <p role="status">请先保存修改，再更改公开状态或移入回收站。</p>
+            )}
+            {actionPending ? (
+              <button type="button" disabled={actionBusy} onClick={() => runRecordAction(actionPending.action)}>
+                {actionBusy ? '正在处理…' : '重试上次操作'}
+              </button>
+            ) : (
+              <div className="actions">
+                <button type="button" disabled={dirty || !!candidate || !!pending || busy || imageBusy || actionBusy}
+                  onClick={() => setActionDialog(isPublic ? 'unpublish' : 'publish')}>
+                  {isPublic ? '取消公开' : '公开展示'}
+                </button>
+                <button type="button" className="danger-button" disabled={dirty || !!candidate || !!pending || busy || imageBusy || actionBusy}
+                  onClick={() => setActionDialog('trash')}>
+                  移入回收站
+                </button>
+              </div>
+            )}
+            {actionMessage && <p role="status">{actionMessage}</p>}
+          </section>
+        )}
       </div>
+      {actionDialog && (
+        <ConfirmDialog
+          title={{ publish: '公开展示这条记录？', unpublish: '取消公开展示？', trash: '移入回收站？' }[actionDialog]}
+          busy={actionBusy}
+          onClose={() => setActionDialog(null)}
+          onConfirm={() => runRecordAction(actionDialog)}
+          confirmLabel={{ publish: '确认公开', unpublish: '取消公开', trash: '移入回收站' }[actionDialog]}
+        >
+          <p>{actionDialog === 'publish'
+            ? '公开后，所有访客都能查看已保存的标题、正文、标签和封面。'
+            : actionDialog === 'unpublish'
+              ? '取消后，访客将无法再通过公开页面查看这条记录。'
+              : '记录将从列表隐藏，可以在回收站恢复。'}</p>
+        </ConfirmDialog>
+      )}
     </main>
   )
 }
